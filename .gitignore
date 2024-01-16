@@ -31,3 +31,2404 @@ build/
 
 ### VS Code ###
 .vscode/
+
+
+create or replace PACKAGE BODY                         CLM_CHEQUE_CYCLE_PKG AS
+
+PROCEDURE CLM_FINANCE_VOID_SCB (
+                          po_ref_finance_void                  out nocopy clm_cheque_cycle_pkg.ref_list,
+                        pi_batch_run_id                    in               COM_BATCH_RUN_TBL.BATCH_RUN_ID%type
+)
+IS
+        v_sql_stmt                                     VARCHAR2(20000);
+BEGIN
+
+     v_sql_stmt:= 'SELECT
+                     /*cpd.cheque_delivery_opt_vid,
+                         (SELECT cldmod.code  FROM com_list_dtl cldmod
+                                  WHERE cldmod.value_id = cpd.claim_payment_mode_vid) payment_mode, */
+                        nvl(sum(CI.INST_AMT),0) INST_AMT
+                 FROM clm_claims_basic_info ccbi,
+                          clm_claims_payment_link ccpl,
+                        clm_payment_detail cpd,
+                       clm_installment ci,
+                       CLM_RECEIVABLE CR
+                    WHERE cr.claims_info_id = ccbi.claims_info_id
+                        and ccbi.claims_basic_info_id = ccpl.claims_basic_info_id
+                     AND ccpl.clm_payment_dtl_id = cpd.clm_payment_dtl_id
+                     AND cpd.clm_payment_dtl_id = ci.clm_payment_dtl_id
+                     and ci.inst_status_vid = 799
+                     AND ccbi.claim_status_vid IN (816)
+                     and NVL(cpd.adjustment_type_vid,0) <> 1200
+                     AND ccbi.record_status = ''A''
+                     and cpd.claim_payment_mode_vid in(550)
+                     and cpd.CHEQUE_DELIVERY_OPT_VID <> 562
+                     AND cr.batch_run_id = NVL (:a, -1)
+                 --GROUP BY  cpd.claim_payment_mode_vid,cpd.cheque_delivery_opt_vid';
+
+            OPEN po_ref_finance_void FOR v_sql_stmt USING
+            pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_FINANCE_VOID_SCB ',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_FINANCE_VOID_SCB ;
+------------------------------------------------------------------------------------------------------------------
+PROCEDURE CLM_FINANCE_VOID_DBS (
+                          po_ref_finance_void                  out nocopy clm_cheque_cycle_pkg.ref_list,
+                        pi_batch_run_id                    in               COM_BATCH_RUN_TBL.BATCH_RUN_ID%type
+)
+IS
+        v_sql_stmt                                     VARCHAR2(20000);
+BEGIN
+
+     v_sql_stmt:= 'SELECT
+                        /*cpd.cheque_delivery_opt_vid,
+                         (SELECT cldmod.code  FROM com_list_dtl cldmod
+                                  WHERE cldmod.value_id = cpd.claim_payment_mode_vid) payment_mode, */
+                        nvl(sum(CI.INST_AMT),0) INST_AMT
+                 FROM clm_claims_basic_info ccbi,
+                          clm_claims_payment_link ccpl,
+                        clm_payment_detail cpd,
+                       clm_installment ci,
+                       CLM_RECEIVABLE CR
+                    WHERE cr.claims_info_id = ccbi.claims_info_id
+                        and ccbi.claims_basic_info_id = ccpl.claims_basic_info_id
+                     AND ccpl.clm_payment_dtl_id = cpd.clm_payment_dtl_id
+                     AND cpd.clm_payment_dtl_id = ci.clm_payment_dtl_id
+                     and ci.inst_status_vid = 799
+                     AND ccbi.claim_status_vid IN (816)
+                     and NVL(cpd.adjustment_type_vid,0) <> 1200
+                     AND ccbi.record_status = ''A''
+                     and cpd.claim_payment_mode_vid in(552,551)
+                     AND cr.batch_run_id = NVL (:a, -1)
+                 --GROUP BY  cpd.claim_payment_mode_vid,cpd.cheque_delivery_opt_vid';
+
+            OPEN po_ref_finance_void FOR v_sql_stmt USING
+            pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_FINANCE_VOID_DBS ',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_FINANCE_VOID_DBS ;
+
+
+
+----------------------------------------------------------------------------------------------------------------
+
+
+----------------------------------------------------------------------------------------------------------------
+PROCEDURE CLM_FINANCE_REFUND (
+                          po_ref_finance_refund            out nocopy clm_cheque_cycle_pkg.ref_list,
+                        pi_batch_run_id                    in               COM_BATCH_RUN_TBL.BATCH_RUN_ID%type
+)
+IS
+        v_sql_stmt                                     VARCHAR2(20000);
+BEGIN
+
+    /*v_sql_stmt:= 'SELECT CR.Claim_Count Refund_Count,CS.Claim_Amt Refund_Amt FROM
+                (SELECT distinct cr.batch_run_id,count(cr.claims_info_id) Claim_Count
+                FROM CLM_RECEIVABLE CR,CLM_RECEIVABLE_OFFSET CRO
+                WHERE CR.CLM_RECEIVABLE_ID=CRO.CLM_RECEIVABLE_ID and CRO.reason=''Refund''
+                Group by cr.Batch_run_id) CR,
+                (SELECT cr.batch_run_id,sum(cro.ADJ_AMT_CLM_POL_CURR) Claim_Amt
+                FROM CLM_RECEIVABLE CR,CLM_RECEIVABLE_OFFSET CRO
+                WHERE CR.CLM_RECEIVABLE_ID=CRO.CLM_RECEIVABLE_ID and CRO.reason=''Refund''
+                Group by cr.Batch_run_id) CS
+                where cr.batch_run_id=cs.batch_run_id
+                and cr.batch_run_id=:A';*/
+         v_sql_stmt:='select nvl((select sum(nvl(rec_amt_home_curr,0))
+                      from CLM_RECEIVABLE cr where cr.reason <> ''Cancel'' and cr.BATCH_RUN_ID = :A ),0) -
+       nvl((select sum(nvl(adj_amt_home_curr,0)) from CLM_RECEIVABLE_offset cro where cro.BATCH_RUN_ID = :A ),0) RefunAmt,
+      (select (CASE WHEN cpd1.claim_payment_mode_vid IN (550) AND cpd1.cheque_delivery_opt_vid IN (561,563) THEN ''SCB''
+       ELSE ''DBS'' END)
+                      from CLM_RECEIVABLE cr1,CLM_PAYMENT_DETAIL cpd1
+                      where cr1.clm_payment_dtl_id=cpd1.clm_payment_dtl_id and cr1.batch_run_id = :A and rownum < 2) Bank_Type
+                      from dual';
+
+            OPEN po_ref_finance_refund FOR v_sql_stmt
+            USING pi_batch_run_id,
+         pi_batch_run_id,
+                  pi_batch_run_id  ;
+
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_FINANCE_REFUND',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_FINANCE_REFUND;
+
+----------------------------------------------------------------------------------------------------------------
+
+PROCEDURE CLM_FINANCE_CANCEL (
+                          po_ref_finance_cancel              out nocopy clm_cheque_cycle_pkg.ref_list,
+                        pi_batch_run_id                    in               COM_BATCH_RUN_TBL.BATCH_RUN_ID%type
+)
+IS
+        v_sql_stmt                                     VARCHAR2(20000);
+BEGIN
+    /* v_sql_stmt:= 'SELECT CR.Claim_Count Cancel_Count,nvl(CS.Claim_Amt,0) Cancel_Amt FROM
+                (SELECT distinct batch_run_id,count(claims_info_id) Claim_Count FROM CLM_RECEIVABLE where reason=''Cancel'' group by batch_run_id) CR,
+                (select batch_run_id,sum(rec_amt_home_curr) Claim_Amt from CLM_RECEIVABLE
+                where reason=''Cancel'' group by batch_run_id) CS
+                where cr.batch_run_id=cs.batch_run_id
+                and cr.batch_run_id=:A'; */
+
+
+        v_sql_stmt:='SELECT    CPD.CHEQUE_DELIVERY_OPT_VID,
+                            (SELECT CLDMOD.CODE FROM COM_LIST_DTL CLDMOD
+                                    WHERE CLDMOD.VALUE_ID=CPD.CLAIM_PAYMENT_MODE_VID) PAYMENT_MODE,
+       (CASE WHEN cpd.claim_payment_mode_vid IN (550) AND cpd.cheque_delivery_opt_vid IN (561,563) THEN ''SCB''
+                                  ELSE ''DBS'' END) Bank_Type,
+                            rec_amt_home_curr
+                    FROM
+                          CLM_RECEIVABLE CR,CLM_PAYMENT_DETAIL CPD
+                    where
+                         CR.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID
+                         and reason=''Cancel''
+                         and cr.batch_run_id=:A';
+
+            OPEN po_ref_finance_cancel FOR v_sql_stmt USING
+            pi_batch_run_id;
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_FINANCE_CANCEL',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_FINANCE_CANCEL;
+
+----------------------------------------------------------------------------------------------------------------
+
+
+--CHQ001
+PROCEDURE CLM_INDIVIDUAL_CHECKLIST (
+        po_ref_clm_individual_chklist     OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(10000);
+BEGIN
+        v_sql_stmt:='SELECT ci.clm_payment_dtl_id, (cci.created_by) ,
+              (SELECT VALUE FROM SEC_USERDETAILS u, SEC_AUTHPROFILE_USERS a
+                          WHERE a.AUTHPROFILE_ID = 3 AND a.USERDETAIL_ID = u.ID
+                          AND upper(u.NAME)=upper(cci.created_by))created_by_name,
+               /*(SELECT su.ID
+                  FROM sec_userdetails su
+                 WHERE UPPER (su.NAME) = UPPER (cci.created_by)) created_by,*/
+               --approved.approved_by,
+               --approved.approved_by_name,
+                decode(CPD.PAYMENT_TYPE_VID,784,
+          --(select an.responder from approver_notification an where an.number_value=ccbi.claims_basic_info_id and an.responder is not null and rownum<2),approved.approved_by) approved_by,
+         (SELECT updated_by from clm_claims_payment_link cpl where cpl.clm_payment_dtl_id = ci.clm_payment_dtl_id and rownum < 2),nvl(approved.approved_by,cci.created_by)) approved_by,
+               decode(CPD.PAYMENT_TYPE_VID,784,(SELECT VALUE FROM SEC_USERDETAILS u, SEC_AUTHPROFILE_USERS a
+               WHERE a.AUTHPROFILE_ID = 3 AND a.USERDETAIL_ID = u.ID AND upper(u.NAME)=upper((SELECT updated_by from clm_claims_payment_link cpl where cpl.clm_payment_dtl_id = ci.clm_payment_dtl_id and rownum < 2))),nvl(approved.approved_by_name
+               ,(SELECT VALUE FROM SEC_USERDETAILS u, SEC_AUTHPROFILE_USERS a
+               WHERE a.AUTHPROFILE_ID = 3 AND a.USERDETAIL_ID = u.ID AND upper(u.NAME)  = upper(cci.created_by)))) approved_by_name,
+               cci.claim_number,
+               nprm.product_no, npm.policy_no,
+               (SELECT ccm1.sur_name || '' '' || ccm1.first_name NAME
+                  FROM com_client_mst ccm1
+                 WHERE ccm1.org_client_id = cemd.client_id
+                   AND ccm1.is_recent = ''Y''
+                   AND ccm1.record_status = ''A'' and rownum < 2) clm_name,
+
+                (SELECT ccm2.sur_name || '' '' || ccm2.first_name NAME
+                  FROM aegi_claims.com_client_mst ccm2
+                 WHERE ccm2.org_client_id = (select distinct member_id from aegi_claims.nbs_member_policy
+                 where org_member_policy_id=cemd.NBS_EMP_MEMBER_POLICY_ID and rownum < 2)
+                   AND ccm2.is_recent = ''Y''
+                   AND ccm2.record_status = ''A'' and rownum < 2) emp_name,
+               cpd.payee_name, SUM (ci.inst_amt) inst_amt,
+               (SELECT cldmod.code
+                  FROM com_list_dtl cldmod
+                 WHERE cldmod.value_id = cpd.claim_payment_mode_vid) payment_mode,
+               (SELECT clddel.code
+                  FROM com_list_dtl clddel
+                 WHERE clddel.value_id =  cpd.cheque_delivery_opt_vid) delivery_option
+          FROM clm_claims_info cci,
+               clm_claims_basic_info ccbi,
+               clm_claims_payment_link ccpl,
+               clm_payment_detail cpd,
+               clm_installment ci,
+               clm_emp_mem_dtl cemd,
+               nbs_policy_mst npm,
+               nbs_scheme_product_dtl nspd,
+               nbs_product_mst nprm,
+               (sELECT max(HST_BASIC_INFO_ID),(SELECT VALUE FROM SEC_USERDETAILS u, SEC_AUTHPROFILE_USERS a
+                          WHERE a.AUTHPROFILE_ID = 3 AND a.USERDETAIL_ID = u.ID
+                          AND upper(u.NAME)=upper(hst.CREATED_BY))APPROVED_BY_NAME,
+                          (hst.created_by)APPROVED_BY,
+                                  hst.CLAIMS_INFO_ID
+                                  FROM sec_userdetails su,aegi_claims.CLM_HST_CLAIMS_BASIC_INFO hst
+                                  WHERE UPPER (su.NAME) = UPPER (hst.created_by) and
+                                  hst.history_event = ''Approved''
+                                  group by hst.HST_BASIC_INFO_ID,SU.ID,hst.created_by,hst.claims_info_id
+                ) Approved
+         WHERE cci.claims_info_id = ccbi.claims_info_id
+           AND ccbi.claims_basic_info_id = ccpl.claims_basic_info_id
+           AND ccpl.clm_payment_dtl_id = cpd.clm_payment_dtl_id
+           AND cpd.clm_payment_dtl_id = ci.clm_payment_dtl_id
+           AND cci.claims_info_id = cemd.claims_info_id
+           AND cci.org_policy_id = npm.org_policy_id
+           AND npm.is_recent = ''Y''
+           AND cci.org_scheme_product_id = nspd.org_scheme_product_id
+           AND nspd.is_recent = ''Y''
+           AND nspd.product_id = nprm.product_id
+           --AND ccbi.claim_status_vid IN (814, 815, 819, 820, 821)
+           --and cpd.payment_status_vid = 784 --Advance payment
+           and
+           (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)
+              OR (CPD.PAYMENT_TYPE_VID=784
+           AND CPD.PAYMENT_STATUS_VID in (805,806)))  --Paid or Advance
+           AND cci.record_status = ''A''
+         --Commented by Monali for IM108
+         --and ccbi.is_recreated <> ''Y''
+           AND cci.claims_info_id = approved.claims_info_id(+)
+           AND ci.batch_run_id = NVL (:a, -1)
+		   AND ci.record_status = ''A'' -- Change by Santi @20120406 Check record Status
+      GROUP BY cci.created_by,
+               cci.claim_number,
+               ccbi.claims_basic_info_id,
+               CPD.PAYMENT_TYPE_VID,
+               nprm.product_no,
+               npm.policy_no,
+               cemd.client_id,
+               cemd.emp_client_id,
+               cemd.NBS_EMP_MEMBER_POLICY_ID,
+               cpd.payee_name,
+               ci.inst_amt,
+               cpd.claim_payment_mode_vid,
+               cpd.cheque_delivery_opt_vid,
+               approved.approved_by,
+               approved.approved_by_name,ci.clm_payment_dtl_id
+      ORDER BY cci.claim_number, emp_name, clm_name ';
+
+        OPEN po_ref_clm_individual_chklist FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_INDIVIDUAL_CHECKLIST',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_INDIVIDUAL_CHECKLIST;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ002
+PROCEDURE OUTSOURCE_CHQ_PRINT (
+        po_ref_outsource_chq_print      OUT NOCOPY     Clm_Cheque_Cycle_Pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(30000);
+BEGIN
+        /*v_sql_stmt:='SELECT DISTINCT CI.BATCH_RUN_ID,
+                    --cheque to be print by scb count/sum
+--IM1337
+--                    (SELECT COUNT(CIPD.CHEQUE_DELIVERY_OPT_VID)
+--                        FROM CLM_INST_PAY_DTL CIPD
+--                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (485,486,561,563) AND --Send Out Cheque, Call Back Cheque
+--                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+--                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID) CHQ_PRINT_CNT,
+-- if same claim no for difference benefit for same payee, finance will pay one cheque for all
+                    (select count(count(cipd.cheque_delivery_opt_vid))
+                        from clm_inst_pay_dtl cipd
+                        where cipd.cheque_delivery_opt_vid in (485,486,561,563) and --send out cheque, call back cheque
+                        cipd.claim_payment_mode_vid in (550,568) and --cheque
+                        cipd.batch_run_id=ci.batch_run_id
+                        group by cipd.claim_number, cipd.payee_id) chq_print_cnt,
+--------
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (485,486,561,563) AND --Send Out Cheque, Call Back Cheque
+                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID),0) CHQ_PRINT_AMT,
+                    --send out by scb count/sum
+                    (SELECT COUNT(CIPD.CHEQUE_DELIVERY_OPT_VID)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (486,561) AND --Send Out Cheque
+                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID) CHQ_SEND_OUT_CNT,
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (486,561) AND --Send Out Cheque
+                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID),0) CHQ_SEND_OUT_AMT,
+                    --return by scb count/sum
+--IM1337
+--                    (SELECT COUNT(CIPD.CHEQUE_DELIVERY_OPT_VID)
+--                        FROM CLM_INST_PAY_DTL CIPD
+--                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (485,563) AND --Call Back Cheque
+--                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+--                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID) CHQ_CALL_BACK_CNT,
+-- if same claim no for difference benefit for same payee, finance will pay one cheque for all
+                    (select count(count(cipd.cheque_delivery_opt_vid))
+                        from clm_inst_pay_dtl cipd
+                        where cipd.cheque_delivery_opt_vid in (485,563) and --call back cheque
+                        cipd.claim_payment_mode_vid in (550,568) and --cheque
+                        cipd.batch_run_id=ci.batch_run_id
+                        group by cipd.claim_number, cipd.payee_id) chq_call_back_cnt,
+--------
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (485,563) AND --Call Back Cheque
+                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID),0) CHQ_CALL_BACK_AMT,
+                    --manual cheque count/sum
+                    (SELECT COUNT(CIPD.CHEQUE_DELIVERY_OPT_VID)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (562) AND --Not to Print Cheque
+--IM1262    include bankdraft
+--                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,552,568) AND --Cheque
+--------
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID) CHQ_NOT_PRINT_CNT,
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CHEQUE_DELIVERY_OPT_VID IN (562) AND --Not to Print Cheque
+--IM1262    include bankdraft
+--                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND --Cheque
+                        CIPD.CLAIM_PAYMENT_MODE_VID IN (550,552,568) AND --Cheque
+--------
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID),0) CHQ_NOT_PRINT_AMT,
+--IM1262    include TT payment
+                    --TT cheque count/sum
+                    (SELECT COUNT(CIPD.CLAIM_PAYMENT_MODE_VID)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CLAIM_PAYMENT_MODE_VID IN (553,793) AND --TT
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID) CHQ_TT_CNT,
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CLAIM_PAYMENT_MODE_VID IN (553,793) AND --TT
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID),0) CHQ_TT_AMT,
+--------
+--IM1262    include USD payment
+                    --USD payment count/sum
+                    NVL((SELECT COUNT(CIPD.CLAIM_PAYMENT_MODE_VID)
+                        FROM CLM_INST_PAY_DTL CIPD,
+                            AEGI_COM.COM_CURRENCY_MST CCM
+                        WHERE CIPD.POLICY_CURRENCY_ID = CCM.CURRENCY_ID
+                        AND CCM.CURR_CODE = ''USD''                         --USD
+                        AND CIPD.BATCH_RUN_ID = CI.BATCH_RUN_ID),0) USD_CNT,
+
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD,
+                            AEGI_COM.COM_CURRENCY_MST CCM
+                        WHERE CIPD.POLICY_CURRENCY_ID = CCM.CURRENCY_ID
+                        AND CCM.CURR_CODE = ''USD''                         --USD
+                        AND CIPD.BATCH_RUN_ID = CI.BATCH_RUN_ID),0) USD_AMT,
+
+                    --MYR payment count/sum
+                    NVL((SELECT COUNT(CIPD.CLAIM_PAYMENT_MODE_VID)
+                        FROM CLM_INST_PAY_DTL CIPD,
+                            AEGI_COM.COM_CURRENCY_MST CCM
+                        WHERE CIPD.POLICY_CURRENCY_ID = CCM.CURRENCY_ID
+                        AND CCM.CURR_CODE = ''MYR''                         --MYR
+                        AND CIPD.BATCH_RUN_ID = CI.BATCH_RUN_ID),0) MYR_CNT,
+
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD,
+                            AEGI_COM.COM_CURRENCY_MST CCM
+                        WHERE CIPD.POLICY_CURRENCY_ID = CCM.CURRENCY_ID
+                        AND CCM.CURR_CODE = ''MYR''                         --MYR
+                        AND CIPD.BATCH_RUN_ID = CI.BATCH_RUN_ID),0) MYR_AMT,
+--------
+                    --payment mode eft count/sum
+                    (SELECT COUNT(CIPD.CLAIM_PAYMENT_MODE_VID)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND --EFT
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID) EFT_CNT,
+                    NVL((SELECT SUM(CIPD.INST_AMT)
+                        FROM CLM_INST_PAY_DTL CIPD
+                        WHERE CIPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND --EFT
+                        CIPD.BATCH_RUN_ID=CI.BATCH_RUN_ID),0) EFT_AMT
+                    FROM
+                        CLM_CLAIMS_BASIC_INFO CCBI,
+                        CLM_CLAIMS_PAYMENT_LINK CCPL,
+                        CLM_PAYMENT_DETAIL CPD,
+                        CLM_INSTALLMENT CI
+                    WHERE CCBI.CLAIMS_BASIC_INFO_ID = CCPL.CLAIMS_BASIC_INFO_ID
+                    AND CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                    AND CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                    -- CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821) --Paid Claims
+                    AND (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)
+                        OR (CPD.PAYMENT_TYPE_VID=784
+                            AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --Paid or Advance
+                    AND CCBI.RECORD_STATUS = ''A''
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+--IM1262
+                    AND ccbi.record_status = ''A''
+                    AND ccpl.record_status = ''A''
+                    AND cpd.record_status = ''A''
+                    AND ci.record_status = ''A''
+                    AND CI.BATCH_RUN_ID = NVL(:A,CI.BATCH_RUN_ID)';
+--------
+--                    AND CI.BATCH_RUN_ID = NVL(:A,-1)';*/
+        v_sql_stmt:='
+---------------------------------------------CROSS JOIN FRO CROSS TAB
+                WITH
+                BATCH_RUN_ID AS
+                    (
+                        SELECT DISTINCT BATCH_RUN_ID FROM CLM_INSTALLMENT WHERE RECORD_STATUS = ''A''
+                        UNION
+                        SELECT DISTINCT BATCH_RUN_ID FROM CLM_RECEIVABLE WHERE RECORD_STATUS = ''A''
+                    ),
+                BANK_TYPE AS
+                        (   SELECT ''SCB'' AS BANK_TYPE FROM DUAL UNION ALL
+--start chr5780 big bank
+ --                      SELECT ''DBS'' AS BANK_TYPE FROM DUAL UNION ALL --GES1496 Bank migrations
+--end chr5780 big bank
+                        SELECT ''OTHERS'' AS BANK_TYPE FROM DUAL
+                    ),
+                CURRENCY_CODE AS
+                    (
+                        SELECT DISTINCT CCM.CURR_CODE AS CURRENCY_CODE
+                            FROM AEGI_COM.COM_CURRENCY_MST CCM,NBS_POLICY_MST NPM WHERE NPM.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND CCM.RECORD_STATUS=''A''
+                            AND  NPM.POLICY_CURRENCY_ID<>3
+                    ),
+                PARAMETER AS
+                    (
+                        SELECT 1 AS SEQ,''Cheques To be Printed (A+B)'' AS PARAM FROM DUAL UNION ALL
+                        SELECT 2 AS SEQ,''          Cheques To be Sent Out (A)'' AS PARAM FROM DUAL UNION ALL
+                        SELECT 3 AS SEQ,''          Cheques To be Returned (B)'' AS PARAM FROM DUAL UNION ALL
+                        SELECT 4 AS SEQ,''EFT Payments'' AS PARAM FROM DUAL UNION
+                        SELECT 5 AS SEQ,''Manual Cheques'' AS PARAM FROM DUAL UNION
+                        SELECT 6 AS SEQ,''Bank Drafts'' AS PARAM FROM DUAL UNION
+                        SELECT 7 AS SEQ,''TT Payments'' AS PARAM FROM DUAL UNION
+                        SELECT 8 AS SEQ,''CPF E-FILE Payments'' AS PARAM FROM DUAL UNION
+                        SELECT 9 AS SEQ,''Refunds'' AS PARAM FROM DUAL UNION
+                        SELECT 10 AS SEQ,''Void'' AS PARAM FROM DUAL
+                    )
+                SELECT
+                    BATCH_RUN_ID,
+                    BANK_TYPE,
+                    CURRENCY_CODE,
+                    PARAM,
+                    0 AS POL_TO_BASE_CURR_EXRATE,
+                    0 AS C_COUNT,
+                    0 AS LC_AMT,
+                    0 AS FC_AMT
+                FROM
+                    BATCH_RUN_ID,
+                    BANK_TYPE,
+                    CURRENCY_CODE,
+                    PARAMETER
+                WHERE BATCH_RUN_ID=NVL(:A,BATCH_RUN_ID)
+                ---------------------------------------------PAID CLIAMS
+                UNION
+                SELECT
+                    CI.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END AS TYPE,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  -- GES 1498 BankMigration Start
+		--when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+		--    and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+	when cpd.cheque_delivery_opt_vid in (562,552) and cpd.claim_payment_mode_vid in (550,568) then
+    ''UOB''
+	-- GES 1498 BankMigration End
+  else
+    ''DBS''
+end) as type,
+--end chr5780 big bank
+                    (SELECT CCM.CURR_CODE FROM AEGI_COM.COM_CURRENCY_MST CCM WHERE CCI.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND CCM.RECORD_STATUS=''A'') AS CURRENCY_CODE,
+                    CASE WHEN (CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND CPD.CHEQUE_DELIVERY_OPT_VID=561) THEN ''          Cheques To be Sent Out (A)''
+                         WHEN (CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND CPD.CHEQUE_DELIVERY_OPT_VID=562) THEN ''Manual Cheques''
+                         WHEN (CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND CPD.CHEQUE_DELIVERY_OPT_VID=563) THEN ''          Cheques To be Returned (B)''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) THEN ''EFT Payments''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (552) THEN ''Bank Drafts''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (553,793) THEN ''TT Payments''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (554) THEN ''CPF E-FILE Payments''
+                    ELSE ''OTHER''
+                    END  AS PARAMETER,
+                    (SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        --PM4345 Added trunc()
+                        AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS POL_TO_BASE_CURR_EXRATE,
+                    --COUNT(DISTINCT FVH.VOUCHER_NBR ) AS C_COUNT,--IM5344
+                    --- COUNT(distinct CCI.claim_number|| cpd.CLAIM_PAYMENT_MODE_VID||cpd.payee_type_vid|| cpd.payee_id ) AS C_COUNT, -- BS PM3829
+					 COUNT(distinct CCI.claim_number|| cpd.CLAIM_PAYMENT_MODE_VID||cpd.payee_type_vid|| cpd.payee_name ) AS C_COUNT, -- BS PM3829
+                    SUM(CI.INST_AMT)*(SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        --PM4345 Added trunc()
+                        AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT)
+                     AS LC_AMT,
+                    SUM(CI.INST_AMT) AS FC_AMT
+                FROM
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI
+                    --AEGI_FINANCE.FIN_VOUCHER_HDR FVH,--IM5344
+                    --AEGI_COM.COM_FINANCE_INTM CFI --IM5344
+                WHERE
+                    CCBI.CLAIMS_BASIC_INFO_ID = CCPL.CLAIMS_BASIC_INFO_ID
+                    AND CCBI.CLAIMS_INFO_ID = CCI.CLAIMS_INFO_ID
+                    AND CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                    AND CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                    AND (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)   ---PAID CLAIMS
+                        OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --PAID OR ADVANCE
+                    AND CCBI.RECORD_STATUS = ''A''
+                    AND CCPL.RECORD_STATUS = ''A''
+                    AND CPD.RECORD_STATUS = ''A''
+                    AND CI.RECORD_STATUS = ''A''
+                    --AND CFI.RV_PV_VOUCHER_ID = FVH.VOUCHER_ID
+                    --AND SUBSTR(cfi.CLAIM_REF_ID,2) = DECODE(SUBSTR(cfi.CLAIM_REF_ID,1,1),''P'',CPD.CLM_PAYMENT_DTL_ID,''I'',CI.CLM_INSTALLMENT_ID)
+                    --AND FVH.VOUCHER_NBR IS NOT NULL
+                    --AND CFI.REF_NUMBER = CCI.CLAIM_NUMBER
+                    AND CPD.CLAIM_PAYMENT_MODE_VID NOT IN (551,569)  --IM5344
+                    AND CI.BATCH_RUN_ID = NVL(:A,CI.BATCH_RUN_ID)
+             GROUP BY
+                    CI.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+	-- GES 1498 BankMigration Start
+		--when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+       -- and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+	when cpd.cheque_delivery_opt_vid in (562,552) and cpd.claim_payment_mode_vid in (550,568) then
+    ''UOB''
+	-- GES 1498 BankMigration End
+  else
+    ''DBS''
+end),
+--end chr5780 big bank
+                    CCI.POLICY_CURRENCY_ID,
+                    CASE WHEN (CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND CPD.CHEQUE_DELIVERY_OPT_VID=561) THEN ''          Cheques To be Sent Out (A)''
+                         WHEN (CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND CPD.CHEQUE_DELIVERY_OPT_VID=562) THEN ''Manual Cheques''
+                         WHEN (CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) AND CPD.CHEQUE_DELIVERY_OPT_VID=563) THEN ''          Cheques To be Returned (B)''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) THEN ''EFT Payments''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (552) THEN ''Bank Drafts''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (553,793) THEN ''TT Payments''
+                         WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (554) THEN ''CPF E-FILE Payments''
+                    ELSE ''OTHER''
+                    END,CI.PAY_CYCLE_RUN_DT
+                UNION
+                ---------------------------------------------EFT PAYMENTS IM5344
+                SELECT
+                    CI.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END AS TYPE,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end) as type,
+--END chr5780 big bank
+                    (SELECT CCM.CURR_CODE FROM AEGI_COM.COM_CURRENCY_MST CCM WHERE CCI.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND CCM.RECORD_STATUS=''A'') AS CURRENCY_CODE,
+                    CASE WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) THEN ''EFT Payments'' ELSE ''OTHER'' END  AS PARAMETER,
+                    (SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        --PM4345 Added trunc()
+                        AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS POL_TO_BASE_CURR_EXRATE,
+                    COUNT(DISTINCT CPIL.CLAIM_PV_NUMBER ||CPD.PAYEE_NAME) AS C_COUNT, -- BS PM3829
+                    SUM(CI.INST_AMT)*(SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        --PM4345 Added trunc()
+                        AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT)
+                     AS LC_AMT,
+                    SUM(CI.INST_AMT) AS FC_AMT
+                FROM
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_PV_INST_LINK CPIL
+                WHERE
+                    CCBI.CLAIMS_BASIC_INFO_ID = CCPL.CLAIMS_BASIC_INFO_ID
+                    AND CCBI.CLAIMS_INFO_ID = CCI.CLAIMS_INFO_ID
+                    AND CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                    AND CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                    AND CI.CLM_INSTALLMENT_ID=CPIL.CLM_INSTALLMENT_ID
+                    AND (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)   ---PAID CLAIMS
+                        OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --PAID OR ADVANCE
+                    AND CCBI.RECORD_STATUS = ''A''
+                    AND CCPL.RECORD_STATUS = ''A''
+                    AND CPD.RECORD_STATUS = ''A''
+                    AND CI.RECORD_STATUS = ''A''
+                    AND CPIL.RECORD_STATUS=''A''
+                    AND CPD.CLAIM_PAYMENT_MODE_VID IN (551,569)
+                    AND CI.BATCH_RUN_ID = NVL(:A,CI.BATCH_RUN_ID)
+             GROUP BY
+                    CI.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end),
+--end chr 5780 big bank
+                    CCI.POLICY_CURRENCY_ID,
+                    CASE WHEN CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) THEN ''EFT Payments'' ELSE ''OTHER'' END,CI.PAY_CYCLE_RUN_DT
+               ---------------------------------------------CHEQUES TO BE PRINTED
+                UNION
+                SELECT
+                    CI.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END AS TYPE,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+   ''UOB''
+  else
+    ''DBS''
+end) as type,
+--end chr5780 big bank
+                    (SELECT CCM.CURR_CODE FROM AEGI_COM.COM_CURRENCY_MST CCM WHERE CCI.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND CCM.RECORD_STATUS=''A'') AS CURRENCY_CODE,
+                    ''Cheques To be Printed (A+B)'' AS PARAMETER,
+                    (SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        --PM4345 Added trunc()
+                        AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS POL_TO_BASE_CURR_EXRATE,
+                    --COUNT(distinct FVH.VOUCHER_NBR ) AS C_COUNT,
+                    COUNT(distinct CCI.claim_number|| cpd.CLAIM_PAYMENT_MODE_VID||cpd.payee_type_vid|| cpd.payee_id ) AS C_COUNT,
+                    SUM(CI.INST_AMT)*(SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        --PM4345 Added trunc()
+                        AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS LC_AMT,
+                    SUM(CI.INST_AMT) AS FC_AMT
+                FROM
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI
+                    --CLM_PV_INST_LINK CPIL
+                    --AEGI_FINANCE.FIN_VOUCHER_HDR FVH,
+                    --AEGI_COM.COM_FINANCE_INTM CFI
+                WHERE
+                    CCBI.CLAIMS_BASIC_INFO_ID = CCPL.CLAIMS_BASIC_INFO_ID
+                    AND CCBI.CLAIMS_INFO_ID = CCI.CLAIMS_INFO_ID
+                    AND CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                    AND CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                    AND (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)   ---PAID CLAIMS
+                        OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --PAID OR ADVANCE
+                    AND CCBI.RECORD_STATUS = ''A''
+                    AND CCPL.RECORD_STATUS = ''A''
+                    AND CPD.RECORD_STATUS = ''A''
+                    AND CI.RECORD_STATUS = ''A''
+                    AND CI.BATCH_RUN_ID = NVL(:A,CI.BATCH_RUN_ID)
+                    AND CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563)
+                    --AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568)
+                    --AND CFI.RV_PV_VOUCHER_ID = FVH.VOUCHER_ID
+                    --AND SUBSTR(cfi.CLAIM_REF_ID,2) = DECODE(SUBSTR(cfi.CLAIM_REF_ID,1,1),''P'',CPD.CLM_PAYMENT_DTL_ID,''I'',CI.CLM_INSTALLMENT_ID)
+                    --AND FVH.VOUCHER_NBR IS NOT NULL
+                    --AND CFI.REF_NUMBER = CCI.CLAIM_NUMBER
+                GROUP BY
+                    CI.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end),
+--end of chr5780 big bank
+                    CCI.POLICY_CURRENCY_ID,CI.PAY_CYCLE_RUN_DT
+                ----------------------FOR VOIDED CLAIM
+                UNION
+                SELECT
+                    CR.BATCH_RUN_ID ,
+--start chr5780 big bank
+--                    CASE WHEN  CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END AS TYPE,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end) as type,
+--end chr5780 big bank
+                    (SELECT CCM.CURR_CODE FROM AEGI_COM.COM_CURRENCY_MST CCM WHERE CCI.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND RECORD_STATUS=''A'') AS CURRENCY_CODE,
+                    ''Void'' AS PARAMETER,
+                    (SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        AND ERM.RECORD_STATUS=''A'' AND CR.PAYMENT_CYCLE_DT BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS POL_TO_BASE_CURR_EXRATE,
+                    COUNT(DISTINCT CCI.CLAIM_NUMBER) AS C_COUNT,
+                    SUM(CI.INST_AMT)*(SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        AND ERM.RECORD_STATUS=''A'' AND CR.PAYMENT_CYCLE_DT BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS LC_AMT,
+                    SUM(CI.INST_AMT) AS FC_AMT
+                FROM
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_RECEIVABLE CR
+                WHERE
+                    CCBI.CLAIMS_BASIC_INFO_ID = CCPL.CLAIMS_BASIC_INFO_ID
+                    AND CCBI.CLAIMS_INFO_ID = CCI.CLAIMS_INFO_ID
+                    AND CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                    AND CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                    AND CCBI.CLAIMS_INFO_ID=CR.CLAIMS_INFO_ID
+                    AND CCBI.CLAIM_STATUS_VID IN (816)   ---VOIDED
+                    AND CI.INST_STATUS_VID = 799
+                    AND (NVL(CPD.ADJUSTMENT_TYPE_VID,0) <> 1200
+                        OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --PAID OR ADVANCE
+                    AND CCBI.RECORD_STATUS = ''A''
+                    AND CCPL.RECORD_STATUS = ''A''
+                    AND CPD.RECORD_STATUS = ''A''
+                    AND CI.RECORD_STATUS = ''A''
+                    AND CR.BATCH_RUN_ID = NVL(:A,CR.BATCH_RUN_ID)
+                GROUP BY
+                    CR.BATCH_RUN_ID,
+--start chr5780 big bank
+--                    CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end),
+--end chr5780 big bank
+                    CCI.POLICY_CURRENCY_ID,CR.PAYMENT_CYCLE_DT
+                --------------------------------FOR VOIDED AND RECREATED CLAIMS
+                UNION
+                SELECT
+                    BATCH_RUN_ID,
+                    TYPE,
+                    CURRENCY_CODE,
+                    PARAMETER,
+                    POL_TO_BASE_CURR_EXRATE,
+                    COUNT(DISTINCT CLAIM_NUMBER) AS C_COUNT,
+                    (SUM(VOIDED_RECREATED_CLAIM_AMT)*POL_TO_BASE_CURR_EXRATE)-(SUM(NEWLY_CREATED_CLAIM_AMT)*POL_TO_BASE_CURR_EXRATE) AS LC_AMT,
+                    SUM(VOIDED_RECREATED_CLAIM_AMT)-SUM(NEWLY_CREATED_CLAIM_AMT) AS FC_AMT
+                    FROM
+                    (
+                        SELECT
+                            CI.BATCH_RUN_ID,
+                            CPD.CLAIM_PAYMENT_MODE_VID,CPD.CHEQUE_DELIVERY_OPT_VID,
+                            CCBI.CLAIM_STATUS_VID,
+                            CCI.CLAIM_NUMBER,
+                            CCBI.VOIDED_CLAIM_NUMBER,
+                            --CPD.PAYEE_ID,
+--start chr5780 big bank
+--                            CASE WHEN  CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END AS TYPE,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end) as type,
+--end chr5780 big bank
+                            (SELECT CCM.CURR_CODE FROM AEGI_COM.COM_CURRENCY_MST CCM WHERE CCI.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND RECORD_STATUS=''A'') AS CURRENCY_CODE,
+                            ''Void'' AS PARAMETER,
+                            --CCI.POL_TO_BASE_CURR_EXRATE,
+                            (SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                                  --PM4345 Added trunc()
+                                  AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS POL_TO_BASE_CURR_EXRATE,
+                            SUM(CI.INST_AMT) AS NEWLY_CREATED_CLAIM_AMT,
+                            (
+                            SELECT
+                                    SUM(NVL(CI1.INST_AMT,0))
+                                FROM
+                                    CLM_CLAIMS_INFO CCI1,CLM_CLAIMS_BASIC_INFO CCBI1,
+                                    CLM_CLAIMS_PAYMENT_LINK CCPL1,CLM_PAYMENT_DETAIL CPD1, CLM_INSTALLMENT CI1
+                                    WHERE
+                                    CCBI.VOIDED_CLAIM_NUMBER=CCI1.CLAIM_NUMBER
+                                    AND CCBI1.CLAIMS_INFO_ID = CCI1.CLAIMS_INFO_ID
+                                    AND CCBI1.CLAIMS_BASIC_INFO_ID = CCPL1.CLAIMS_BASIC_INFO_ID
+                                    AND CCPL1.CLM_PAYMENT_DTL_ID = CPD1.CLM_PAYMENT_DTL_ID
+                                    AND CPD1.CLM_PAYMENT_DTL_ID = CI1.CLM_PAYMENT_DTL_ID
+                                    AND CCI1.RECORD_STATUS=''A''
+                                    --AND CCBI1.IS_RECREATED=''Y''
+                                    AND CCBI1.RECORD_STATUS = ''A''
+                                    AND CCPL1.RECORD_STATUS = ''A''
+                                    AND CPD1.RECORD_STATUS = ''A''
+                                    AND CI1.RECORD_STATUS = ''A''
+                                    AND CCBI1.CLAIM_STATUS_VID=817
+                                    --AND CCBI1.IS_RECREATED=''N''
+                                    AND CI1.BATCH_RUN_ID = NVL(:A,CI1.BATCH_RUN_ID)
+                            ) AS VOIDED_RECREATED_CLAIM_AMT
+                        FROM
+                            CLM_CLAIMS_BASIC_INFO CCBI,
+                            CLM_CLAIMS_INFO CCI,
+                            CLM_CLAIMS_PAYMENT_LINK CCPL,
+                            CLM_PAYMENT_DETAIL CPD,
+                            CLM_INSTALLMENT CI
+                        WHERE
+                            CCBI.CLAIMS_BASIC_INFO_ID = CCPL.CLAIMS_BASIC_INFO_ID
+                            AND CCBI.CLAIMS_INFO_ID = CCI.CLAIMS_INFO_ID
+                            AND CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                            AND CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                            AND CCBI.CLAIM_STATUS_VID IN (809)   ---IN PROGRESS
+                            AND CI.INST_STATUS_VID = 799
+                            AND (NVL(CPD.ADJUSTMENT_TYPE_VID,0) <> 1200
+                                OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --PAID OR ADVANCE
+                            AND CCBI.IS_RECREATED=''Y''
+                            AND CCBI.RECORD_STATUS = ''A''
+                            AND CCPL.RECORD_STATUS = ''A''
+                            AND CPD.RECORD_STATUS = ''A''
+                            AND CI.RECORD_STATUS = ''A''
+                            AND CI.BATCH_RUN_ID = NVL(:A,CI.BATCH_RUN_ID)
+                        GROUP BY
+                            CI.BATCH_RUN_ID,
+                            CPD.CLAIM_PAYMENT_MODE_VID,CPD.CHEQUE_DELIVERY_OPT_VID,
+                            CCI.CLAIM_NUMBER,
+                            CCBI.VOIDED_CLAIM_NUMBER,
+                            CPD.PAYEE_ID,
+                            CCBI.CLAIM_STATUS_VID,
+--start chr5780 big bank
+--                            CASE WHEN CPD.CHEQUE_DELIVERY_OPT_VID IN (561,563) AND CPD.CLAIM_PAYMENT_MODE_VID IN (550,568) THEN ''SCB'' ELSE ''DBS'' END,
+(case
+  when cpd.cheque_delivery_opt_vid in (561,563) and cpd.claim_payment_mode_vid in (550,568) then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'')
+        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end),
+--end chr5780 big bank
+                            CCI.POLICY_CURRENCY_ID, CI.PAY_CYCLE_RUN_DT
+                        ORDER BY
+                            CI.BATCH_RUN_ID,
+                            CCI.CLAIM_NUMBER,
+                            CPD.PAYEE_ID,
+                            CCBI.CLAIM_STATUS_VID
+                     )
+                    GROUP BY
+                        BATCH_RUN_ID,
+                        TYPE,
+                        CURRENCY_CODE,
+                        PARAMETER,
+                        POL_TO_BASE_CURR_EXRATE
+                    HAVING SUM(VOIDED_RECREATED_CLAIM_AMT)-SUM(NEWLY_CREATED_CLAIM_AMT)>0
+                ---------------------------------REFUND TRANSACTION
+                UNION
+                SELECT
+                    CRO.BATCH_RUN_ID,
+					--CHR4601
+--start chr5780 big bank
+--                    CASE WHEN INSTR(fin.CASH_BANK_SHORT_DESC,''SCB'',1) > 0 THEN ''SCB'' ELSE ''DBS'' END TYPE,
+(case
+  when INSTR(fin.CASH_BANK_SHORT_DESC,''SCB'',1) > 0 then
+    ''SCB''
+  when (UPPER(clm_interface_uob_pkg.get_profile_field_val(''CL005_FORMAT_TYPE'')) = ''INT_UOB_INTF'') then
+--        and CPD.CLAIM_PAYMENT_MODE_VID not in (554) then  --redmine19257
+    ''UOB''
+  else
+    ''DBS''
+end) as type,
+--end chr5780 big bank
+                    (SELECT CCM.CURR_CODE FROM AEGI_COM.COM_CURRENCY_MST CCM WHERE CCI.POLICY_CURRENCY_ID = CCM.CURRENCY_ID AND RECORD_STATUS=''A'') AS CURRENCY_CODE,
+                    ''Refunds'' AS PARAMETER,
+                    --CCI.POL_TO_BASE_CURR_EXRATE,
+                    (SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        AND ERM.RECORD_STATUS=''A'' AND CR.PAYMENT_CYCLE_DT BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) AS POL_TO_BASE_CURR_EXRATE,
+                    COUNT(DISTINCT CCI.CLAIM_NUMBER) AS C_COUNT,
+                    NVL(SUM(CRD.REFUND_AMT)*(SELECT DISTINCT ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE CCI.POLICY_CURRENCY_ID=ERM.FOREIGN_CURR_ID
+                        AND ERM.RECORD_STATUS=''A'' AND CR.PAYMENT_CYCLE_DT BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT),0) AS LC_AMT,
+                    NVL(SUM(CRD.REFUND_AMT),0) AS FC_AMT
+                FROM
+                    CLM_RECEIVABLE_OFFSET CRO
+                    INNER JOIN CLM_REFUND_DTL CRD ON CRO.OFFSETING_REFUND_ID=CRD.REFUND_ID
+                    INNER JOIN CLM_RECEIVABLE CR ON CRO.CLM_RECEIVABLE_ID=CR.CLM_RECEIVABLE_ID
+                    INNER JOIN CLM_CLAIMS_INFO CCI ON CR.CLAIMS_INFO_ID=CCI.CLAIMS_INFO_ID
+                    INNER JOIN CLM_CLAIMS_BASIC_INFO CCBI ON CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID
+					--CHR4601
+                    LEFT JOIN
+                    (select MAX(CASH_BANK_SHORT_DESC) KEEP (DENSE_RANK FIRST ORDER BY fin.default_indicator desc)
+                    OVER (PARTITION BY fin.CASH_BANK_TYPE_VID, fin.currency_id,fin.module_type_vid) CASH_BANK_SHORT_DESC,
+
+                    nvl(fin.CASH_BANK_TYPE_VID,0) CASH_BANK_TYPE_VID,
+                    fin.currency_id,NVL(fin.module_type_vid,0) module_type_vid
+                    from
+                    aegi_finance.FIN_CASH_BANK_MST fin
+
+                    where fin.record_status = ''A'')fin
+                    ON fin.CASH_BANK_TYPE_VID = DECODE(crd.REFUND_MODE_VID ,550, 1144,crd.REFUND_MODE_VID) AND fin.currency_id = crd.currency_id
+                    AND fin.module_type_vid = 732
+					--CHR4601
+                WHERE
+                    CRO.BATCH_RUN_ID =NVL(:A,CRO.BATCH_RUN_ID)
+                    AND CRO.RECORD_STATUS=''A''
+                    AND CR.RECORD_STATUS=''A''
+                    AND CCI.RECORD_STATUS=''A''
+                    AND CCBI.RECORD_STATUS=''A''
+                    AND CRO.REASON=''Refund''
+                GROUP BY CRO.BATCH_RUN_ID,CCI.POLICY_CURRENCY_ID,CR.PAYMENT_CYCLE_DT,fin.CASH_BANK_SHORT_DESC
+';
+
+        OPEN po_ref_outsource_chq_print FOR v_sql_stmt USING pi_batch_run_id,
+                                                             pi_batch_run_id,
+                                                             pi_batch_run_id,
+                                                             pi_batch_run_id,
+                                                             pi_batch_run_id,
+                                                             pi_batch_run_id,
+                                                             pi_batch_run_id,
+                                                             pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name         =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name       =>    'OUTSOURCE_CHQ_PRINT',
+                pi_debug_msg            =>     SQLERRM,
+                pi_entity_id            =>     NULL,
+                pi_created_by           =>    'SYSTEM'
+            );
+END OUTSOURCE_CHQ_PRINT;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ003
+PROCEDURE CLM_MANUAL_CHQ_LIST (
+        po_ref_clm_manual_chq_list         OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(5000);
+BEGIN
+        v_sql_stmt:='SELECT
+                      CI.BATCH_RUN_ID,
+                      CPD.CLAIM_PAYMENT_MODE_VID,
+                      (select value from sec_authprofile_users where userdetail_id in (SELECT su.ID FROM sec_userdetails su WHERE UPPER (su.NAME) = UPPER (cci.created_by) and su.rec_status=''A'')
+                      AND rec_status=''A'' and authprofile_id = 3) created_by,--PAYEL_CHR1572@05112012
+                      --cci.created_by,
+                     --'''' ACCESSOR_USER_ID,
+                     --For user Id
+                    --(SELECT su.ID FROM sec_userdetails su WHERE UPPER (su.NAME) = UPPER (cci.created_by)) accessor_user_id,
+                    NPM.POLICY_NO,
+                    CCI.CLAIM_NUMBER,
+                    CPD.PAYEE_NAME,
+                    sum(CI.INST_AMT) INST_AMT,
+                    (select CCM.CURR_CODE from COM_CURRENCY_MST CCM where CCM.CURRENCY_ID=CCI.POLICY_CURRENCY_ID) POLICY_CURRENCY_CODE,
+                    (select CCM.CURRENCY_NAME from COM_CURRENCY_MST CCM where CCM.CURRENCY_ID=CCI.POLICY_CURRENCY_ID) POLICY_CURRENCY_DESC,
+                    --- SUM(CI.INST_AMT)*(CCI.POL_TO_BASE_CURR_EXRATE) LC_AMT -- BS PM3829
+				  SUM(CI.INST_AMT) * (SELECT  ERM.CLOSED_RATE FROM AEGI_FINANCE.FIN_EXCHANGE_RATE_MST ERM WHERE ERM.FOREIGN_CURR_ID = CCI.POLICY_CURRENCY_ID
+                     AND ERM.RECORD_STATUS=''A'' AND trunc(CI.PAY_CYCLE_RUN_DT) BETWEEN ERM.EFF_FROM_DT AND ERM.EFF_TO_DT) LC_AMT --- BS PM3829
+                    FROM
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    NBS_POLICY_MST NPM
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.ORG_POLICY_ID=NPM.ORG_POLICY_ID AND
+                    NPM.IS_RECENT=''Y'' AND
+                    (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)
+                       OR (CPD.PAYMENT_TYPE_VID=784
+                       AND CPD.PAYMENT_STATUS_VID in (805,806))) AND --Paid or Advance Claims
+                    CPD.CLAIM_PAYMENT_MODE_VID  IN (550,552,553) AND --Non-EFT and Bank Draft -- Added by Nadeem for IM1338--553 added by Payel_CHR1572@05112012
+                    CPD.CHEQUE_DELIVERY_OPT_VID=562 AND --Not to Print Cheque
+                    CCI.RECORD_STATUS=''A'' AND
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    GROUP BY
+                    CLAIM_PAYMENT_MODE_VID,
+                    CI.BATCH_RUN_ID,
+                    NPM.POLICY_NO,
+                    CCI.CLAIM_NUMBER,
+                    CPD.PAYEE_NAME,
+                    CI.INST_AMT,
+                    CCI.POLICY_CURRENCY_ID,
+                    CCI.POL_TO_BASE_CURR_EXRATE,
+				  CI.PAY_CYCLE_RUN_DT, --- BS PM3829
+                    cci.created_by
+                        ORDER BY CCI.CLAIM_NUMBER';
+
+        OPEN po_ref_clm_manual_chq_list FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_MANUAL_CHQ_LIST',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_MANUAL_CHQ_LIST;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ004
+PROCEDURE CLM_RETAVIVA_CHQ_LIST (
+        po_ref_clm_retaviva_chq_list    OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(5000);
+BEGIN
+        v_sql_stmt:='SELECT
+                    cci.created_by,
+                    --'''' ACCESSOR_USER_ID,
+                    -- For USER  id
+                    --(SELECT su.ID FROM sec_userdetails su WHERE UPPER (su.NAME) = UPPER (cci.created_by)) accessor_user_id,
+                    NPM.POLICY_NO,
+                    CCI.CLAIM_NUMBER,
+                    CPD.PAYEE_NAME,
+                    sum(CI.INST_AMT) INST_AMT,
+                    (select CCM.CURR_CODE from COM_CURRENCY_MST CCM where CCM.CURRENCY_ID=CCI.POLICY_CURRENCY_ID) POLICY_CURRENCY_CODE,
+                    (select CCM.CURRENCY_NAME from COM_CURRENCY_MST CCM where CCM.CURRENCY_ID=CCI.POLICY_CURRENCY_ID) POLICY_CURRENCY_DESC,
+                    SUM(CI.INST_AMT)*(CCI.POL_TO_BASE_CURR_EXRATE) LC_AMT
+                    FROM
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    NBS_POLICY_MST NPM
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.ORG_POLICY_ID=NPM.ORG_POLICY_ID AND
+                    NPM.IS_RECENT=''Y'' AND
+                    (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)
+                    OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID in (805,806))) AND
+                    --Added advance payment for IM816 Monali
+                    CPD.CLAIM_PAYMENT_MODE_VID NOT IN (551,569) AND --Non-EFT
+                    CPD.CHEQUE_DELIVERY_OPT_VID in (485,563) AND --Call Back Cheque
+                    CCI.RECORD_STATUS=''A'' AND
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    GROUP BY
+                    NPM.POLICY_NO,
+                    CCI.CLAIM_NUMBER,
+                    CPD.PAYEE_NAME,
+                    --**PM1279**--
+                    --CI.INST_AMT,
+                    --**END PM1279**--
+                    CCI.POLICY_CURRENCY_ID,
+                    CCI.POL_TO_BASE_CURR_EXRATE,
+                    cci.created_by';
+
+                    OPEN po_ref_clm_retaviva_chq_list FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_RETAVIVA_CHQ_LIST',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_RETAVIVA_CHQ_LIST;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ005
+PROCEDURE CLM_FINANCE_REPORT (
+        po_ref_clm_finance_report        OUT nocopy     CLM_CHEQUE_CYCLE_PKG.ref_list,
+        pi_batch_run_id                    in               COM_BATCH_RUN_TBL.BATCH_RUN_ID%type
+)
+IS
+        v_sql_stmt                                     VARCHAR2(5000);
+BEGIN
+         COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'D',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_FINANCE_REPORT',
+                pi_debug_msg            =>    'Test',
+                pi_entity_id            =>    pi_batch_run_id,
+                pi_created_by            =>    'SYSTEM'
+            );
+        /*
+        v_sql_stmt := 'SELECT
+                    CI.INST_PAID_DT,
+                    CPIL.CLAIM_PV_NUMBER REQUISITION_NO,
+                    CCI.CLAIM_NUMBER,
+                    CPD.PAYEE_NAME,
+                    CPD.CHEQUE_DELIVERY_OPT_VID,
+                    (SELECT CLDMOD.CODE FROM COM_LIST_DTL CLDMOD WHERE CLDMOD.VALUE_ID=CPD.CLAIM_PAYMENT_MODE_VID) PAYMENT_MODE,
+                    nvl(sum(CI.INST_AMT),0) INST_AMT
+                    FROM
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_PV_INST_LINK CPIL
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CI.CLM_INSTALLMENT_ID=CPIL.CLM_INSTALLMENT_ID AND
+                    (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)
+                       OR (CPD.PAYMENT_TYPE_VID=784
+                       AND CPD.PAYMENT_STATUS_VID in (805,806)))  --Paid or Advance
+                    --CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821,812) AND --Paid and Rejected Claims
+                    --CPD.CHEQUE_DELIVERY_OPT_VID=562 AND --Not to Print Cheque
+                    and CCI.RECORD_STATUS=''A'' AND
+                    ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    GROUP BY
+                    CI.INST_PAID_DT,
+                    CCI.CLAIM_NUMBER,
+                    CPD.PAYEE_NAME,
+                    CPD.CLAIM_PAYMENT_MODE_VID,CPD.CHEQUE_DELIVERY_OPT_VID,CPIL.CLAIM_PV_NUMBER';
+        */
+        v_sql_stmt :=
+                    '
+                    SELECT
+                        distinct
+                        CI.INST_PAID_DT,
+                        CPIL.CLAIM_PV_NUMBER REQUISITION_NO,
+                        CCI.CLAIM_NUMBER,
+                        DECODE(cpd.payee_type_vid,559,DECODE(Get_Provider_Admin_Id(ccpl.CLAIMS_BASIC_INFO_ID,cpd.org_payee_id),
+                        -1,(SELECT payee_name FROM CLM_PROVIDER_MST WHERE provider_id = cpd.payee_id),
+                        (SELECT mst.payee_name FROM CLM_PRO_ADMIN_GROUP_DTL dtl, CLM_PRO_ADMIN_GROUP_MST mst,
+                        CLM_PROVIDER_MST pro WHERE dtl.provider_id = cpd.payee_id AND pro.provider_id = dtl.provider_id
+                        AND dtl.provider_admin_group_id = mst.provider_admin_group_id
+						And dtl.record_status = ''A''  --- BS PM2869
+						)),cpd.payee_name) PAYEE_NAME,
+                        CPD.CHEQUE_DELIVERY_OPT_VID,
+                        (SELECT CLDMOD.CODE FROM COM_LIST_DTL CLDMOD WHERE CLDMOD.VALUE_ID=CPD.CLAIM_PAYMENT_MODE_VID) PAYMENT_MODE,
+                        (SELECT CLDMOD.CODE FROM COM_LIST_DTL CLDMOD WHERE CLDMOD.VALUE_ID=CPD.Cheque_delivery_opt_VID) CHQ_DELIVERY_MODE,
+                        NVL((SELECT SUM(CI2.INST_AMT) FROM CLM_INSTALLMENT ci2 WHERE CI2.CLM_INSTALLMENT_ID=Ci.CLM_INSTALLMENT_ID),0) INST_AMT,
+                        (select CCM.CURR_CODE from COM_CURRENCY_MST CCM where CCM.CURRENCY_ID=CCI.POLICY_CURRENCY_ID) POLICY_CURRENCY_CODE,
+                        NVL((SELECT SUM(CI2.INST_AMT) FROM CLM_INSTALLMENT ci2 WHERE CI2.CLM_INSTALLMENT_ID=Ci.CLM_INSTALLMENT_ID),0)*(CCI.POL_TO_BASE_CURR_EXRATE) LC_AMT
+                    FROM
+                        CLM_CLAIMS_INFO CCI,
+                        CLM_CLAIMS_BASIC_INFO CCBI,
+                        CLM_CLAIMS_PAYMENT_LINK CCPL,
+                        CLM_PAYMENT_DETAIL CPD,
+                        CLM_INSTALLMENT CI,
+                        CLM_PV_INST_LINK CPIL
+                    WHERE
+                        CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                        CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                        CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                        CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                        CI.CLM_INSTALLMENT_ID=CPIL.CLM_INSTALLMENT_ID AND
+                        (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821)
+                           OR (CPD.PAYMENT_TYPE_VID=784
+                           AND CPD.PAYMENT_STATUS_VID IN (805,806)))  --Paid or Advance
+                        AND CCI.RECORD_STATUS=''A'' AND
+                        --Commented by Monali for IM108
+                        --ccbi.is_recreated <> ''Y'' AND
+                        CI.BATCH_RUN_ID= :A
+                    ';
+        OPEN po_ref_clm_finance_report FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_FINANCE_REPORT',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_FINANCE_REPORT;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ006
+PROCEDURE CLM_LST_AC_HOLD_DD(
+        po_ref_clm_lst_ac_hold_dd         OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+--START CHR5780 BIG BNAK CL003
+pragma autonomous_transaction;
+--END CHR5780 BIG BNAK CL003
+        v_sql_stmt                                     VARCHAR2(5000);
+        v_inst_tot_amt                                 clm_installment.inst_amt%TYPE :=0;
+BEGIN
+
+--START CHR5780 BIG BNAK CL003
+  if pi_batch_run_id is not null then
+
+    BEGIN
+        select sum(ci.inst_amt) inst_amt into v_inst_tot_amt
+              from clm_claims_basic_info  ccbi
+              inner join clm_claims_payment_link   ccpl
+                on ccbi.claims_basic_info_id=ccpl.claims_basic_info_id
+                and ccbi.claim_status_vid <> 817
+              inner join clm_payment_detail        cpd
+                on ccpl.clm_payment_dtl_id=cpd.clm_payment_dtl_id
+                and cpd.claim_payment_mode_vid in (551,569)  --EFT
+              inner join clm_installment           ci
+                on cpd.clm_payment_dtl_id=ci.clm_payment_dtl_id
+                and ci.record_status='A'
+              inner join clm_pv_inst_link          cpil
+                on ci.clm_installment_id=cpil.clm_installment_id
+              where ci.batch_run_id=pi_batch_run_id;
+
+    EXCEPTION WHEN OTHERS THEN
+        v_inst_tot_amt:=0;
+    END;
+
+    if v_inst_tot_amt <> 0 then
+        insert into aegi_claims.clm_reconciliation_trk
+          (id,process_run_id, process_code, business_dt, eft_amt, is_reconcile_succ, is_reconcile, record_status, created_by, created_dt, updated_by, updated_dt)
+        values(AEGI_CLAIMS.CLM_RECONCILIATION_TRK_SQ.nextval
+          ,pi_batch_run_id
+          ,'EFT_DIR_CR_ACCT_HOLDER_LIST'
+          ,com_sysadmin_pkg.get_business_date_fun
+          ,v_inst_tot_amt
+          ,null
+          ,null
+          ,'A'
+          ,'System'
+          ,sysdate
+          ,null
+          ,null);
+    end if;
+    commit;
+  end if;
+
+--END CHR5780 BIG BNAK CL003
+        v_sql_stmt:='SELECT
+                    CPIL.CLAIM_PV_NUMBER,
+                    CPD.PAYEE_NAME,
+                    SUM(CI.INST_AMT) INST_AMT
+                    FROM
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_PV_INST_LINK CPIL
+                    WHERE
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CI.CLM_INSTALLMENT_ID=CPIL.CLM_INSTALLMENT_ID AND
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND --EFT
+                    --CCBI.IS_MEDICAL=''Y'' AND -- commentee for PM1029
+                    CI.RECORD_STATUS=''A'' AND
+                    ---Added by Monali for IM410
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    GROUP BY
+                    CPIL.CLAIM_PV_NUMBER,
+                    CPD.PAYEE_NAME
+                    order by CPIL.CLAIM_PV_NUMBER';
+
+        OPEN po_ref_clm_lst_ac_hold_dd FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+--START CHR5780 BIG BNAK CL003
+            rollback;
+--END CHR5780 BIG BNAK CL003
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_LST_AC_HOLD_DD',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_LST_AC_HOLD_DD;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ007
+PROCEDURE CPF_SETTLEMENT_LETTER(
+        po_ref_cpf_settlement_letter     OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(5000);
+BEGIN
+        v_sql_stmt:='SELECT
+                    CPIL.CLAIM_PV_NUMBER,
+                    CCPD.PAYEE PAYEE_NAME,
+                    AEGI_NBS.GET_REP_ADDRESS(CIM.ADDRESS1,CIM.ADDRESS2,CIM.ADDRESS3,CIM.ADDRESS4,null,CIM.COUNTRY_NAME,CIM.POSTAL_CODE,chr(10)) INSTITUTION_ADDRESS,
+                    CPIL.PAY_DT,
+                    CCI.CLAIM_NUMBER,
+                    CCI.CREATED_BY,
+                    (SELECT CLDMEDI.CODE FROM COM_LIST_DTL CLDMEDI WHERE CLDMEDI.VALUE_ID=CCPD.CPF_TYPE_VID) MEDISAVE_MEDISHIELD,
+                    (select ccm1.sur_name || '' '' || ccm1.first_name Name from com_client_mst ccm1 where ccm1.org_client_id=cemd.CLIENT_ID and ccm1.is_recent=''Y'' and ccm1.record_status=''A'') CLM_NAME,
+                    (select ccm2.sur_name || '' '' || ccm2.first_name Name from com_client_mst ccm2 where ccm2.org_client_id=cemd.EMP_CLIENT_ID and ccm2.is_recent=''Y'' and ccm2.record_status=''A'') EMP_NAME,
+                    (SELECT CGM.NAME FROM COM_GROUP_MST CGM WHERE CCI.ORG_GROUP_ID=CGM.ORG_GROUP_ID AND CGM.IS_RECENT=''Y'') GROUP_NAME,
+                    (select CPM.PROVIDER_NAME from CLM_PROVIDER_MST CPM where CPM.PROVIDER_ID=CCPD.CPF_PROVIDER_ID) PROVIDER_NAME,
+                    CCPD.INCURRED_FROM_DT,
+                    CCPD.INCURRED_TO_DT,
+                    CCPD.PAYEE_CPF_AC_NO,
+                    CCPD.HOSPITAL_BILL_NO,
+                    sum(CCPD.PAYABLE_AMT) CPF_PAYABLE_AMT
+                    FROM
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_CPF_PAYMENT_DTL CCPD,
+                    CLM_PV_INST_LINK CPIL,
+                    CLM_EMP_MEM_DTL CEMD,
+                    (select CIM1.ADDRESS1,
+                        CIM1.ADDRESS2,
+                        CIM1.ADDRESS3,
+                        CIM1.ADDRESS4,
+                        (select CCM.NAME from COM_COUNTRY_MST CCM where CCM.COUNTRY_ID=CIM1.COUNTRY_ID) COUNTRY_NAME,
+                        CIM1.POSTAL_CODE
+                        from COM_INSTITUTION_MST CIM1
+                        where CIM1.INSTITUTION_TYPE_VID=1201 and rownum<2) CIM
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CCPD.CLM_PAYMENT_DTL_ID AND
+                    CI.CLM_INSTALLMENT_ID=CPIL.CLM_INSTALLMENT_ID AND
+                    CCBI.CLAIMS_INFO_ID=CEMD.CLAIMS_INFO_ID AND
+                    CCBI.IS_MEDICAL=''Y'' AND
+                    CPD.PAYEE_TYPE_VID=558 AND --CPF
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND --EFT
+                    CCI.RECORD_STATUS=''A'' AND
+                    CCPD.RECORD_STATUS=''A'' AND
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    group by
+                    CPIL.CLAIM_PV_NUMBER,
+                    CPD.PAYEE_NAME,
+                    CIM.ADDRESS1,
+                    CIM.ADDRESS2,
+                    CIM.ADDRESS3,
+                    CIM.ADDRESS4,
+                    CIM.COUNTRY_NAME,
+                    CIM.POSTAL_CODE,
+                    CPIL.PAY_DT,
+                    CCI.CLAIM_NUMBER,
+                    CCI.CREATED_BY,
+                    CCPD.CPF_TYPE_VID,
+                    cemd.CLIENT_ID,
+                    cemd.EMP_CLIENT_ID,
+                    CCI.ORG_GROUP_ID,
+                    CCPD.CPF_PROVIDER_ID,
+                    CCPD.INCURRED_FROM_DT,
+                    CCPD.INCURRED_TO_DT,
+                    CCPD.PAYEE_CPF_AC_NO,
+                    CCPD.PAYEE,
+                    CCPD.HOSPITAL_BILL_NO
+                    order by CCI.CLAIM_NUMBER,MEDISAVE_MEDISHIELD';
+    OPEN po_ref_cpf_settlement_letter FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CPF_SETTLEMENT_LETTER',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CPF_SETTLEMENT_LETTER;
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ008
+PROCEDURE H_S_L_PAID_VIA_EFT(
+        po_ref_h_s_l_paid_via_eft         OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(30000);
+BEGIN
+        v_sql_stmt:='SELECT
+                    CPIL.CLAIM_PV_NUMBER,
+                    CPD.PAYEE_NAME,
+                    --Updated by Monali for UAT Defect Id 3837
+                    --CPM.PROVIDER_CODE,
+                    --CPM.PROVIDER_NAME,
+                    DECODE(CPAGM.PROVIDER_ADMIN_GROUP_ID, NULL,CPM.PROVIDER_CODE,CPAGM.ADMIN_GROUP_CODE)PROVIDER_CODE,
+                    DECODE(CPAGM.PROVIDER_ADMIN_GROUP_ID, NULL,CPM.PROVIDER_NAME,CPAGM.ADMIN_GROUP_NAME_DESC)PROVIDER_NAME,
+                    --Updated by Monali for UAT Defect Id 3837
+                    --AEGI_NBS.GET_REP_ADDRESS(CPM.ADDRESS1,CPM.ADDRESS2,CPM.ADDRESS3,CPM.ADDRESS4,null,(select CCM.NAME from COM_COUNTRY_MST CCM where CCM.COUNTRY_ID=CPM.COUNTRY_ID),CPM.POSTAL_CODE,chr(10)) PROVIDER_ADDRESS,
+                    DECODE(CPAGM.PROVIDER_ADMIN_GROUP_ID, NULL,
+                    (AEGI_NBS.GET_REP_ADDRESS(CPM.ADDRESS1,CPM.ADDRESS2,CPM.ADDRESS3,CPM.ADDRESS4,null,(select CCM.NAME from COM_COUNTRY_MST CCM where CCM.COUNTRY_ID=CPM.COUNTRY_ID),CPM.POSTAL_CODE,chr(10)) ),
+                    (AEGI_NBS.GET_REP_ADDRESS(CPAGM.ADDRESS1,CPAGM.ADDRESS2,CPAGM.ADDRESS3,CPAGM.ADDRESS4,null,(select CCM.NAME from COM_COUNTRY_MST CCM where CCM.COUNTRY_ID=CPAGM.COUNTRY_ID),CPAGM.POSTAL_CODE,chr(10))) )
+                   PROVIDER_ADDRESS,
+                  --Updated by Monali for UAT Defect Id 3837
+                    sum(CI.INST_AMT) INST_AMT,
+                    CPIL.PAY_DT,
+                    CCI.CLAIM_NUMBER,
+                    CCI.SPA_REF_NO,           -- Added for CHR4612
+                    CCI.CREATED_BY,
+                           (select SU.id from SEC_USERDETAILS SU where upper(SU.NAME)=upper(CCI.CREATED_BY)) CREATED_BY_ID,
+                    --CEMD.EMP_SUR_NAME || '' '' || CEMD.EMP_FIRST_NAME EMP_NAME,
+                    --CEMD.CLM_SUR_NAME || '' '' || CEMD.CLM_FIRST_NAME CLM_NAME,
+                    (select ccm1.sur_name || '' '' || ccm1.first_name Name from com_client_mst ccm1 where ccm1.org_client_id=cemd.CLIENT_ID and ccm1.is_recent=''Y'' and ccm1.record_status=''A'') CLM_NAME,
+                    (select ccm2.sur_name || '' '' || ccm2.first_name Name from com_client_mst ccm2 where ccm2.org_client_id=cemd.EMP_CLIENT_ID and ccm2.is_recent=''Y'' and ccm2.record_status=''A'') EMP_NAME,
+                    (select CGM.NAME from COM_GROUP_MST CGM where CCI.ORG_GROUP_ID=CGM.ORG_GROUP_ID and CGM.IS_RECENT=''Y'') GROUP_NAME,
+                    (select max(CCBTI.HOSPITAL_BILL_NO) from CLM_CLAIMED_BENEFIT_INFO CCBTI where CCBTI.RECORD_STATUS=''A'' AND CCBTI.PROVIDER_ID=CPM.PROVIDER_ID and CCBTI.CLAIMS_BASIC_INFO_ID=CCBI.CLAIMS_BASIC_INFO_ID) HOSPITAL_BILL_NO
+                    FROM
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_PV_INST_LINK CPIL,
+                    CLM_PROVIDER_MST CPM,
+                    --Added by Monali for UAT Defect Id 3837
+                    CLM_PRO_ADMIN_GROUP_MST CPAGM,
+                    CLM_PRO_ADMIN_GROUP_DTL CPAGD,
+                    --Added by Monali for UAT Defect Id 3837
+                    CLM_EMP_MEM_DTL CEMD
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CI.CLM_INSTALLMENT_ID=CPIL.CLM_INSTALLMENT_ID AND
+                    CPD.PAYEE_ID=CPM.PROVIDER_ID AND --PayeeID is ProviderID when PayeeType is PROVIDER
+                      --Added by Monali for UAT Defect Id 3837
+                    CPAGD.PROVIDER_ID(+) = CPM.PROVIDER_ID AND
+                    -- IM4358 check-in on behalf of Nikhil by srinivasa
+                    --NVL(CPAGD.EFFECTIVE_DT,CCBI.INCURRED_FROM_DT ) <= CCBI.INCURRED_FROM_DT AND
+                    CCBI.INCURRED_FROM_DT <= NVL(CPAGD.TERMINATION_DT,''31-Dec-9999'')  AND
+                    CPAGD.PROVIDER_ADMIN_GROUP_ID=CPAGM.PROVIDER_ADMIN_GROUP_ID(+) AND
+                    --Added by Monali for UAT Defect Id 3837
+                    CCBI.CLAIMS_INFO_ID=CEMD.CLAIMS_INFO_ID AND
+                    CCBI.IS_MEDICAL=''Y'' AND
+                    CPD.PAYEE_TYPE_VID=559 AND --Provider
+                    CCI.EVENT_ID not in (2,7) AND --Shiv:IM1221:Added condition
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND --EFT
+                    (CCBI.CLAIM_STATUS_VID IN (814,815,819,820,821) OR (CPD.PAYMENT_TYPE_VID=784 AND CPD.PAYMENT_STATUS_VID in (805,806))) AND --Paid or Advance
+                    CCI.RECORD_STATUS=''A'' AND
+                    CPAGD.RECORD_STATUS(+) =''A'' AND --PM4858:Zarni:05/03/2020
+                    CPAGM.RECORD_STATUS(+) =''A'' AND --PM4858:Zarni:05/03/2020
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    group by
+                    CPIL.CLAIM_PV_NUMBER,
+                    CPD.PAYEE_NAME,
+                    CPAGM.PROVIDER_ADMIN_GROUP_ID,
+                    CPAGM.ADMIN_GROUP_CODE,
+                    CPAGM.ADMIN_GROUP_NAME_DESC,
+                    CPAGM.ADDRESS1,
+                    CPAGM.ADDRESS2,
+                    CPAGM.ADDRESS3,
+                    CPAGM.ADDRESS4,
+                    CPAGM.COUNTRY_ID,
+                    CPAGM.POSTAL_CODE,
+                    CPM.PROVIDER_CODE,
+                    CPM.PROVIDER_NAME,
+                    CPM.ADDRESS1,
+                    CPM.ADDRESS2,
+                    CPM.ADDRESS3,
+                    CPM.ADDRESS4,
+                    CPM.COUNTRY_ID,
+                    CPM.POSTAL_CODE,
+                    CPIL.PAY_DT,
+                    CCI.CLAIM_NUMBER,
+                    CCI.SPA_REF_NO,      -- Added for CHR4612
+                    CCI.CREATED_BY,
+                    --CEMD.EMP_FIRST_NAME,
+                    --CEMD.EMP_SUR_NAME,
+                    --CEMD.CLM_FIRST_NAME,
+                    --CEMD.CLM_SUR_NAME,
+                    cemd.CLIENT_ID,
+                    cemd.EMP_CLIENT_ID,
+                    CCI.ORG_GROUP_ID,
+                    CPM.PROVIDER_ID,
+                    CCBI.CLAIMS_BASIC_INFO_ID
+                      ORDER BY CCI.CLAIM_NUMBER';
+
+        OPEN po_ref_h_s_l_paid_via_eft FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'H_S_L_PAID_VIA_EFT',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END H_S_L_PAID_VIA_EFT;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ009
+PROCEDURE CLM_APPLICATION_MED_REP(
+        po_ref_clm_app_med_rep            OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+        v_sql_stmt                                     VARCHAR2(20000);
+BEGIN
+        v_sql_stmt:='SELECT   ccbi.client_reference_no,
+            DECODE(cpd.payee_type_vid,555,
+              (select AEGI_NBS.fn_get_PnCname( cemd.MEMBER_POLICY_ID) from dual),CPD.PAYEE_NAME
+                             ) PAYEE_NAME,/*Added By Monali 19-Jun-2009 For Task-Id 40*/
+                             cpm.provider_code,
+                         cpm.provider_name,
+                         aegi_nbs.get_rep_address
+                                               (cpm.address1,
+                                                cpm.address2,
+                                                cpm.address3,
+                                                cpm.address4,
+                                                NULL,
+                                                (SELECT ccm.NAME
+                                                   FROM com_country_mst ccm
+                                                  WHERE ccm.country_id = cpm.country_id),
+                                                cpm.postal_code,
+                                                CHR (10)
+                                               ) provider_address,
+                         SUM (ci.inst_amt) inst_amt,
+                        --          (SELECT ccm1.sur_name || '' '' || ccm1.first_name
+                        --    FROM com_client_mst ccm1
+                        --   WHERE ccm1.org_client_id = cemd.client_id
+                        --     AND ccm1.is_recent = ''Y''
+                        --     AND ccm1.record_status = ''A'') clm_name,
+                          (select AEGI_NBS.fn_get_PnCname( cemd.MEMBER_POLICY_ID) from dual) clm_name,
+                         (SELECT clddel.code
+                            FROM com_list_dtl clddel
+                           WHERE clddel.value_id = cpd.cheque_delivery_opt_vid)  delivery_option,
+                       ----- Start: Added for CHR4612 for new arrangement columns for Inpatient and Outpatient Claims
+                        CASE
+                        WHEN nem.event_id = 1 THEN
+                         (SELECT DISTINCT DECODE
+                                             (nam.attention_to_vid,
+                                              934,
+                                              --(SELECT (sur_name || '' '' || first_name
+                                               --            ) emp_name
+                                               --       FROM clm_member clmmem,
+                                               --            clm_member_dtl clmmemdtl,
+                                               --            clm_mbr_association cma,
+                                               --            clm_claims_basic_info ccbi
+                                               --      WHERE clmmemdtl.clm_member_id =
+                                               --                           clmmem.clm_member_id
+                                               --        AND cma.clm_member_dtl_id =
+                                               --                    clmmemdtl.clm_member_dtl_id
+                                               --        AND cma.claims_info_id =
+                                              --                              cci.claims_info_id
+                                               --        AND ccbi.claims_info_id =
+                                               --                             cci.claims_info_id),
+                                                 (select AEGI_NBS.fn_get_PnCname(cemd.NBS_EMP_MEMBER_POLICY_ID) from dual),
+                                              935, (cam.description),
+                                              936, (SELECT NAME
+                                                      FROM com_group_mst cgm
+                                                     WHERE cgm.org_group_id = cci.org_group_id),
+                                              937, (SELECT strpreferredname
+                                                      FROM chm_agent_m
+                                                     WHERE stragentcd =
+                                                              (SELECT cms_get_agency_code
+                                                                                    (source_id)
+                                                                 FROM chm_policy_source
+                                                                WHERE source_type_vid = 228
+                                                                  AND account_id =
+                                                                            cci.org_account_id
+                                                                  AND record_status = ''A''
+                                                                  AND ROWNUM < 2))
+                                             )
+                                     FROM com_account_mst cam, nbs_arrangement_mst nam
+                                    WHERE cam.ind_inp_pymt_adv = nam.arrangement_no
+                                      AND cci.org_account_id = cam.org_account_id
+                                      AND cam.is_recent = ''Y''
+                                      AND nam.referas_vid = 932                       --For CC
+                                      AND ROWNUM < 2)
+                        WHEN nem.event_id = 2 THEN
+                         (SELECT DISTINCT DECODE
+                                             (nam.attention_to_vid,
+                                              934,
+                                                 (select AEGI_NBS.fn_get_PnCname(cemd.NBS_EMP_MEMBER_POLICY_ID) from dual),
+                                              935, (cam.description),
+                                              936, (SELECT NAME
+                                                      FROM com_group_mst cgm
+                                                     WHERE cgm.org_group_id = cci.org_group_id),
+                                              937, (SELECT strpreferredname
+                                                      FROM chm_agent_m
+                                                     WHERE stragentcd =
+                                                              (SELECT cms_get_agency_code
+                                                                                    (source_id)
+                                                                 FROM chm_policy_source
+                                                                WHERE source_type_vid = 228
+                                                                  AND account_id =
+                                                                            cci.org_account_id
+                                                                  AND record_status = ''A''
+                                                                  AND ROWNUM < 2))
+                                             )
+                                     FROM com_account_mst cam, nbs_arrangement_mst nam
+                                    WHERE cam.ind_out_pymt_adv = nam.arrangement_no
+                                      AND cci.org_account_id = cam.org_account_id
+                                      AND cam.is_recent = ''Y''
+                                      AND nam.referas_vid = 932                       --For CC
+                                      AND ROWNUM < 2)
+                          END cc
+                          ----- End: Added for CHR4612
+                    FROM clm_claims_info cci,
+                         clm_claims_basic_info ccbi,
+                         clm_claims_payment_link ccpl,
+                         clm_payment_detail cpd,
+                         clm_installment ci,
+                         clm_provider_mst cpm,
+                         clm_emp_mem_dtl cemd,
+                         nbs_event_mst nem,
+                         nbs_benefit_mst nbm
+                   WHERE cci.claims_info_id = ccbi.claims_info_id
+                     AND ccbi.claims_basic_info_id = ccpl.claims_basic_info_id
+                     AND ccpl.clm_payment_dtl_id = cpd.clm_payment_dtl_id
+                     AND cpd.clm_payment_dtl_id = ci.clm_payment_dtl_id
+                     AND cpd.org_payee_id = cpm.provider_id
+                     AND ccbi.claims_info_id = cemd.claims_info_id      --PayeeID is ProviderID when PayeeType is PROVIDER
+                     AND cci.event_id = nem.event_id
+                     AND cpd.benefit_id = nbm.benefit_id
+                     AND nbm.benefit_code = ''MR''
+                     AND ccbi.is_medical = ''Y''
+                     AND cpd.payee_type_vid = 559
+                     AND                                                            --Provider
+                         cpd.claim_payment_mode_vid IN (551, 569)
+                     AND                                                                 --EFT
+                         UPPER (nem.event_type) IN (''INPATIENT'', ''OUTPATIENT'')
+                     AND (   ccbi.claim_status_vid IN (814, 815, 819, 820, 821)
+                          OR (    cpd.payment_type_vid = 784
+                              AND cpd.payment_status_vid IN (805, 806)
+                             )
+                         )
+                     AND                                                     --Paid or Advance
+                         cci.record_status = ''A''
+                     --Commented by Monali for IM108
+                     --AND ccbi.is_recreated <> ''Y''
+                     AND ci.batch_run_id = NVL (:a, -1)
+                GROUP BY ccbi.client_reference_no,
+                  cpd.payee_type_vid,
+                  cemd.member_policy_id,
+                  cemd.nbs_emp_member_policy_id,
+                         cpd.payee_name,
+                         cpm.provider_code,
+                         cpm.provider_name,
+                         cpm.address1,
+                         cpm.address2,
+                         cpm.address3,
+                         cpm.address4,
+                         cpm.country_id,
+                         cpm.postal_code,
+                         cemd.client_id,
+                         cpd.cheque_delivery_opt_vid,
+                         cci.claims_info_id,
+                         cci.org_group_id,
+                         cci.org_account_id,
+                         nem.event_id';          --- Added for CHR4612 for new arrangement columns
+
+        OPEN po_ref_clm_app_med_rep FOR v_sql_stmt USING pi_batch_run_id;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_APPLICATION_MED_REP',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+END CLM_APPLICATION_MED_REP;
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+--CHQ010
+PROCEDURE CLM_DTL_ACC_HOLDER_LIST(
+        po_ref_clm_dtl_accholder_list    OUT nocopy     clm_cheque_cycle_pkg.ref_list,
+        pi_batch_run_id                 IN             com_batch_run_tbl.batch_run_id%TYPE
+)
+IS
+--START CHR5780 BIG BNAK CL003
+pragma autonomous_transaction;
+  v_eft_amt       number:=0;
+  --v_tot_eft_amt   number:=0;
+--END CHR5780 BIG BNAK CL003
+        v_sql_stmt                      VARCHAR2(32767);
+        v_str                           VARCHAR2(200):=NULL;
+        v_str1                          VARCHAR2(200):=NULL;
+        v_batch_run_id                  varchar2(100):=NULL;
+BEGIN
+  /*      v_sql_stmt:='SELECT
+                    CPD.PAYEE_NAME,
+                    CPBD.BANK_NAME,
+                    CPBD.BANK_ACCOUNT_NO,
+                                        (select fbbm.BRANCH_NAME from fin_bank_branch_mst fbbm where fbbm.BANK_BRANCH_ID=cpbd.BANK_BRANCH_ID and fbbm.BANK_ID=cpbd.BANK_ID) Branch_name,
+                    sum(INST_AMT) INST_AMT,
+                    upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                    (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                         else ''OTHER'' end from CLM_CLAIMED_BENEFIT_INFO CCBTI
+                         WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE
+                    FROM
+                    CLM_CLAIMS_INFO CCI,
+                    CLM_CLAIMS_BASIC_INFO CCBI,
+                    CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    CLM_PAYMENT_DETAIL CPD,
+                    CLM_INSTALLMENT CI,
+                    CLM_PAYEE_BANK_DTL CPBD,
+                    NBS_EVENT_MST NEM--,
+                    --(select CCBTI1.CLAIMS_BASIC_INFO_ID, CCBTI1.PRO_CONTRACT_TYPE_VID
+                     --   from CLM_CLAIMED_BENEFIT_INFO CCBTI1
+                    --    order by CCBTI1.CLM_CLAIMED_BENEFIT_INFO_ID) CCBTI
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CPBD.CLM_PAYMENT_DTL_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID = CPBD.CLAIMS_BASIC_INFO_ID AND
+                    CCI.EVENT_ID=NEM.EVENT_ID AND
+                    --CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID(+) AND
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND --EFT
+                    --Updated by Monali for IM434
+                    --UPPER(NEM.EVENT_TYPE) IN (''INPATIENT'',''OUTPATIENT'') AND
+                    UPPER(NEM.EVENT_ID) IN (1,2,7,8) AND
+                    CCPL.RECORD_STATUS = ''A'' AND
+                    CPD.RECORD_STATUS = ''A'' AND
+                    CCBI.RECORD_STATUS = ''A'' AND
+                    NEM.RECORD_STATUS = ''A'' AND
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    CCI.RECORD_STATUS=''A'' AND
+                    --Commented by Monali for IM108
+                    --ccbi.is_recreated <> ''Y'' AND
+                    CI.BATCH_RUN_ID=nvl(:A,-1)
+                    GROUP BY
+                    CPD.PAYEE_NAME,
+                    CPBD.BANK_NAME,
+                    CPBD.BANK_ACCOUNT_NO,
+                    cpbd.BANK_ID,
+                    cpbd.BANK_BRANCH_ID,
+                    NEM.EVENT_TYPE,
+                    CCBI.CLAIMS_BASIC_INFO_ID';*/
+
+    If pi_batch_run_id IS Null
+    Then
+    --SELECT Tab_To_String(CAST(COLLECT(NVL(to_char(ab.batch_run_id),'')) as aegi_claims.t_varchar2_tab))
+    SELECT NVL(WM_CONCAT(ab.batch_run_id),-1)
+        INTO v_batch_run_id
+    FROM(
+--start redmine 19077
+--            SELECT DISTINCT CCBI.BATCH_RUN_ID
+            SELECT DISTINCT CI.BATCH_RUN_ID
+--end redmine 19077
+                FROM AEGI_CLAIMS.CLM_CLAIMS_INFO CCI
+                    INNER JOIN AEGI_CLAIMS.CLM_CLAIMS_BASIC_INFO CCBI ON CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID
+                        AND CCBI.CLAIM_STATUS_VID NOT IN (816,817)
+                        AND CCBI.BATCH_RUN_ID IS NOT NULL
+                        AND CCBI.RECORD_STATUS='A'
+                    INNER JOIN AEGI_CLAIMS.CLM_CLAIMS_PAYMENT_LINK CCPL ON CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID
+                        AND CCPL.RECORD_STATUS='A'
+                    INNER JOIN AEGI_CLAIMS.CLM_PAYMENT_DETAIL CPD ON CCPL.CLM_PAYMENT_DTL_ID = CPD.CLM_PAYMENT_DTL_ID
+                        AND CPD.CLAIM_PAYMENT_MODE_VID IN (551,569)
+                        AND CPD.RECORD_STATUS='A'
+                    INNER JOIN AEGI_CLAIMS.CLM_INSTALLMENT CI ON CPD.CLM_PAYMENT_DTL_ID = CI.CLM_PAYMENT_DTL_ID
+                        AND CI.RECORD_STATUS='A'
+                	--start redmine 19077
+--                    INNER JOIN AEGI_CLAIMS.FIN_VOUCHER_HDR FVH ON CCI.CLAIM_NUMBER = FVH.REF_NBR
+--                        AND FVH.RECORD_STATUS='A'
+--                    INNER JOIN AEGI_CLAIMS.FIN_VOU_PMT_DTL FVPD ON FVH.VOUCHER_ID = FVPD.VOUCHER_ID
+                    INNER JOIN CLM_PV_INST_LINK PV
+                      ON CI.CLM_INSTALLMENT_ID = PV.CLM_INSTALLMENT_ID
+                      AND PV.RECORD_STATUS = 'A'
+                    INNER JOIN AEGI_COM.COM_FINANCE_INTM CFI
+                      ON PV.CLAIM_PV_NUMBER = CFI.REF_PV_NUMBER
+                    INNER JOIN AEGI_CLAIMS.FIN_VOU_PMT_DTL FVPD
+                      ON CFI.COM_FINANCE_INTM_ID  = FVPD.COM_FINANCE_INTM_ID
+                	--end redmine 19077
+                        AND FVPD.BANK_ID IS NOT NULL
+                        AND FVPD.BANK_BRANCH_ID IS NOT NULL
+                        AND FVPD.BANK_ACCT_NAME IS NOT NULL
+                        AND FVPD.BANK_ACCT_NBR IS NOT NULL
+                        AND FVPD.PMT_METHOD_VID IN (551,569)
+                        AND NVL(FVPD.FILE_GENERATION_DATE,to_date('01-Jan-1901')) = to_date('01-Jan-1901')
+                        AND FVPD.RECORD_STATUS='A'
+                --start redmine 19077
+                WHERE NVL(CI.BATCH_RUN_ID,0) <> 0
+--                AND ci.batch_run_id >= ccbi.batch_run_id
+                --end redmine 19077
+        )ab;
+    Elsif pi_batch_run_id IS NOT NULL
+    Then
+        v_batch_run_id := pi_batch_run_id;
+      End If;
+
+--START CHR5780 BIG BNAK CL003
+    --Assumption that report will not run from report module with batch_run_id = null.
+    if (pi_batch_run_id is null) then --testing
+
+      --redmine 19044
+--      for r_batchid in (select trim(regexp_substr(v_batch_run_id, '[^,]+', 1, level)) as batchid
+--                        from dual
+--                        connect by instr(v_batch_run_id, ',', 1, level - 1) > 0)
+--      loop
+--        --if error straight failed the report cos there should be record if batch no exists
+--        select sum(ci.inst_amt) inst_amt
+--        into v_eft_amt
+----start redmine 19707
+--        from (select distinct ci.*
+----end redmine19707
+--        from aegi_claims.clm_claims_info                cci
+--        inner join aegi_claims.clm_claims_basic_info    ccbi
+--          on cci.claims_info_id=ccbi.claims_info_id and cci.record_status='A'
+----start redmine 19125
+----          and ccbi.claim_status_vid <> 817 and ccbi.record_status = 'A'
+--          and ccbi.claim_status_vid not in (816, 817) and ccbi.record_status = 'A'
+----start redmine19125
+--        inner join aegi_claims.clm_claims_payment_link  ccpl
+--          on ccbi.claims_basic_info_id=ccpl.claims_basic_info_id and ccpl.record_status = 'A'
+--        inner join aegi_claims.clm_payment_detail       cpd
+--          on ccpl.clm_payment_dtl_id=cpd.clm_payment_dtl_id and cpd.record_status = 'A'
+--          and cpd.claim_payment_mode_vid in (551,569) and cpd.payee_type_vid in (555,556,557,558,559,560)
+--        inner join aegi_claims.clm_installment          ci
+--          on cpd.clm_payment_dtl_id=ci.clm_payment_dtl_id and ci.record_status = 'A'
+--        inner join aegi_claims.nbs_event_mst            nem
+--          on cci.event_id=nem.event_id and nem.record_status = 'A'
+----start redmine19707
+----        where ci.batch_run_id = r_batchid.batchid;
+--        inner join clm_pv_inst_link pv
+--          on ci.clm_installment_id = pv.clm_installment_id
+--          and pv.record_status = 'A'
+--        inner join aegi_com.com_finance_intm cfi
+--          on pv.claim_pv_number = cfi.ref_pv_number and cfi.record_status = 'A'
+--        inner join aegi_claims.fin_vou_pmt_dtl fvpd
+--          on cfi.com_finance_intm_id  = fvpd.com_finance_intm_id
+--            and fvpd.bank_id is not null
+--            and fvpd.bank_branch_id is not null
+--            and fvpd.bank_acct_name is not null
+--            and fvpd.bank_acct_nbr is not null
+--            and fvpd.pmt_method_vid in (551,569)
+--            and nvl(fvpd.file_generation_date,to_date('01-Jan-1901')) = to_date('01-Jan-1901')
+--            and fvpd.record_status='A'
+--        where ci.batch_run_id = r_batchid.batchid ) ci;
+--end redmine19707
+
+--        v_tot_eft_amt:= v_tot_eft_amt+v_eft_amt;
+--      end loop;
+	/* move to generation package
+    BEGIN
+            select
+            sum (nvl (fvh.voucher_amt, 0)) into v_tot_eft_amt
+            from com_finance_intm        cfi
+            inner join fin_voucher_hdr   fvh
+            on fvh.voucher_id = cfi.rv_pv_voucher_id
+            and fvh.voucher_type_vid = 645              -- PV Payment Voucher
+            and fvh.voucher_status_vid in (641, 959)    -- Approved / Paid
+            inner join fin_vou_pmt_dtl   fvpd
+            on fvpd.voucher_id = fvh.voucher_id
+            and fvpd.com_finance_intm_id = cfi.com_finance_intm_id
+            and fvpd.record_status = 'A'
+            and fvpd.is_club_pmt_flag = 'Y'
+            and fvpd.pmt_method_vid = 551
+            and fvpd.file_generation_date is null
+            left join nbs_policy_mst    npm
+            on npm.org_policy_id = fvh.policy_id
+            and npm.is_recent = 'Y'
+            where exists (select 1 from clm_pv_inst_link cpil
+                      where cpil.record_status = 'A'
+                      and cpil.claim_pv_number = cfi.ref_pv_number)
+            and cfi.payee_id is not null
+            and cfi.payment_mode_vid = 551
+            and (nvl (npm.is_cpf_eft_payment, 'N') <> 'Y' or nvl (cfi.payee_type_vid, 0) <> 558)
+            and fvpd.bank_id is not null
+            --          and fvpd.bank_branch_id is not null
+            and fvpd.bank_acct_nbr is not null
+            and fvpd.bank_acct_name is not null;
+    exception when others then
+        v_tot_eft_amt:= 0;
+    END;
+
+	  if v_batch_run_id <> '-1' then --santi--redmine19044
+	      insert into aegi_claims.clm_reconciliation_trk
+	      (id,process_run_id, process_code, business_dt, eft_amt, is_reconcile_succ, is_reconcile, record_status, created_by, created_dt, updated_by, updated_dt)
+	      values(AEGI_CLAIMS.CLM_RECONCILIATION_TRK_SQ.nextval
+	            ,v_batch_run_id
+	            ,'EFT_DTL_LIST_OF_ACCT_HOLDER'
+	            ,com_sysadmin_pkg.get_business_date_fun
+	            ,v_tot_eft_amt
+	            ,null
+	            ,null
+	            ,'A'
+	            ,'System'
+	            ,sysdate
+	            ,null
+	            ,null);
+		end if; */--santi--redmine19044
+      commit;
+    end if;
+--END CHR5780 BIG BNAK CL003
+
+    v_str := ' CI.BATCH_RUN_ID IN (' || v_batch_run_id || ') AND ';
+    v_str1 := ' CI1.BATCH_RUN_ID IN (' || v_batch_run_id || ')';
+
+
+         v_sql_stmt:=
+         '
+            select FIN.PAYEE_NAME,
+       FIN.BANK_NAME,
+       FIN.BANK_ACCOUNT_NO,
+       FIN.BRANCH_NAME,
+       FIN.REF_PV_NUMBER,
+	   --**START PM2308
+       --FIN.REF_NBR,
+       FIN.REF_NUMBER REF_NBR,
+	   --**END PM2308
+       CCI1.EVENT_TYPE,
+       CCI1.PANEL_TYPE,
+       ''' || v_batch_run_id || '''batch_run_id1,
+       SUM(CCI1.INST_AMT) AS INST_AMT
+from
+                        (
+                        select
+                        FVPD.PAY_TO payee_name,
+                        (SELECT bank_name FROM com_bank_mst WHERE bank_id =fvpd.bank_id) bank_name,
+                        fvpd.bank_acct_Nbr bank_account_no,
+                        (SELECT fbbm.BRANCH_NAME FROM fin_bank_branch_mst fbbm WHERE fbbm.BANK_BRANCH_ID=fvpd.bank_branch_id AND fbbm.BANK_ID=fvpd.bank_id) Branch_name,
+                        --sum(cci1.inst_amt) inst_amt,
+                        --cci1.event_type,
+                        --cci1.panel_type,
+                        CFI.REF_PV_NUMBER,
+						--**START PM2308
+                        --fvh.REF_NBR,
+						CFI.REF_number,
+						--**END PM2308
+                        fvpd.payee_id,
+                        fvpd.PMT_METHOD_VID
+                        --'''|| v_batch_run_id ||''' batch_run_id1
+                     From aegi_finance.fin_vou_pmt_dtl fvpd
+                        INNER JOIN aegi_finance.fin_voucher_hdr fvh ON FVH.VOUCHER_ID=FVPD.VOUCHER_ID AND FVPD.RECORD_STATUS=''A'' --AND fvpd.bank_acct_Nbr IS NOT NULL
+                        INNER JOIN com_finance_intm cfi ON FVH.VOUCHER_ID = CFI.RV_PV_VOUCHER_ID AND CFI.PAYMENT_MODE_VID = 551 AND CFI.COM_FINANCE_INTM_ID = FVPD.COM_FINANCE_INTM_ID
+                        --INNER JOIN aegi_claims.CLM_INSTALLMENT CI1 ON CFI.CLAIM_REF_ID = ''P''||CI1.CLM_PAYMENT_DTL_ID AND ' || v_str1 || ' AND CI1.RECORD_STATUS = ''A''
+                        INNER JOIN aegi_claims.CLM_INSTALLMENT CI1 ON (CFI.CLAIM_REF_ID = ''P''||CI1.CLM_PAYMENT_DTL_ID OR CFI.CLAIM_REF_ID = ''I''||CI1.CLM_INSTALLMENT_ID) AND ' || v_str1 || ' AND CI1.RECORD_STATUS = ''A''
+                        where cheque_status_vid <> 1366 --redmine 19125
+                     group by
+                        FVPD.PAY_TO,
+                        fvpd.bank_id,
+                        fvpd.bank_acct_Nbr,
+                        fvpd.bank_branch_id,
+                        --sum(cci1.inst_amt) inst_amt,
+                        --cci1.event_type,
+                        --cci1.panel_type,
+                        CFI.REF_PV_NUMBER,
+						--**START PM2308
+                        --fvh.REF_NBR,
+						CFI.REF_number,
+						--**END PM2308
+                        fvpd.payee_id,
+                        fvpd.PMT_METHOD_VID
+                        )
+                        fin--PM1029
+                        RIGHT JOIN
+                        (
+                        select ab.claim_number,ab.inst_amt,ab.event_type,ab.panel_type,ab.org_policy_id,ab.org_account_id,ab.record_status,ab.org_payee_id
+                            from
+                            (
+                            SELECT
+                                CCI.CLAIM_NUMBER,
+                                sum(CI.INST_AMT) INST_AMT,
+                                upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                                (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                                    when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                                    when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                                    else ''OTHER'' end from aegi_claims.CLM_CLAIMED_BENEFIT_INFO CCBTI
+                                    WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE,
+                                cci.org_policy_id,
+                                cci.org_account_id,
+                                CCI.RECORD_STATUS,
+                                cpd.org_payee_id
+                            FROM
+                                aegi_claims.CLM_CLAIMS_INFO CCI,
+                                aegi_claims.CLM_CLAIMS_BASIC_INFO CCBI,
+                                aegi_claims.CLM_CLAIMS_PAYMENT_LINK CCPL,
+                                aegi_claims.CLM_PAYMENT_DETAIL CPD,
+                                aegi_claims.CLM_INSTALLMENT CI,
+                                aegi_claims.NBS_EVENT_MST NEM
+                            WHERE
+                                CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                                CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                                CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                                CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                                CCI.EVENT_ID=NEM.EVENT_ID AND
+                                CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND
+                            --  NEM.EVENT_ID IN (1,2,7,8) AND
+                                CCPL.RECORD_STATUS = ''A'' AND
+                                CPD.RECORD_STATUS = ''A'' AND
+                                CCBI.RECORD_STATUS = ''A'' AND
+                                NEM.RECORD_STATUS = ''A'' AND
+                                CCBI.CLAIM_STATUS_VID <> 817 AND
+                                CCI.RECORD_STATUS=''A'' AND
+								ci.record_status = ''A'' AND -- Change by Santi @20120406 Check record Status
+                                --CI.BATCH_RUN_ID = nvl(:A,-1) AND
+                                ' || v_str || '
+                                cpd.payee_type_vid = 555
+                                and ccbi.claim_status_vid not in (816, 817)   --redmine 19125
+                            GROUP BY
+                                CCI.CLAIM_NUMBER,
+                                NEM.EVENT_TYPE,
+                                CCBI.CLAIMS_BASIC_INFO_ID,
+                                cci.org_policy_id,
+                                cci.org_account_id,
+                                CCI.RECORD_STATUS,
+                                cpd.org_payee_id
+    union all
+    --for group
+    SELECT
+                    CCI.CLAIM_NUMBER,
+                    sum(CI.INST_AMT) INST_AMT,
+                    upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                    (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                         else ''OTHER'' end from aegi_claims.CLM_CLAIMED_BENEFIT_INFO CCBTI
+                         WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+                  FROM
+                    aegi_claims.CLM_CLAIMS_INFO CCI,
+                    aegi_claims.CLM_CLAIMS_BASIC_INFO CCBI,
+                    aegi_claims.CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    aegi_claims.CLM_PAYMENT_DETAIL CPD,
+                    aegi_claims.CLM_INSTALLMENT CI,
+                    aegi_claims.NBS_EVENT_MST NEM
+                  WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.EVENT_ID=NEM.EVENT_ID AND
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND
+                   -- NEM.EVENT_ID IN (1,2,7,8) AND
+                    CCPL.RECORD_STATUS = ''A'' AND
+                    CPD.RECORD_STATUS = ''A'' AND
+                    CCBI.RECORD_STATUS = ''A'' AND
+                    NEM.RECORD_STATUS = ''A'' AND
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    CCI.RECORD_STATUS=''A'' AND
+					ci.record_status = ''A'' AND -- Change by Santi @20120406 Check record Status
+                 --   CI.BATCH_RUN_ID=nvl(:A,-1) AND
+                    ' || v_str || '
+                    cpd.payee_type_vid = 556
+                    and ccbi.claim_status_vid not in (816, 817)   --redmine 19125
+                   GROUP BY
+                    CCI.CLAIM_NUMBER,
+                    NEM.EVENT_TYPE,
+                    CCBI.CLAIMS_BASIC_INFO_ID,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+    union all
+    --for group account
+    SELECT
+                    CCI.CLAIM_NUMBER,
+                    sum(CI.INST_AMT) INST_AMT,
+                    upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                    (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                         else ''OTHER'' end from aegi_claims.CLM_CLAIMED_BENEFIT_INFO CCBTI
+                         WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+                 FROM
+                    aegi_claims.CLM_CLAIMS_INFO CCI,
+                    aegi_claims.CLM_CLAIMS_BASIC_INFO CCBI,
+                    aegi_claims.CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    aegi_claims.CLM_PAYMENT_DETAIL CPD,
+                    aegi_claims.CLM_INSTALLMENT CI,
+                    aegi_claims.NBS_EVENT_MST NEM
+                 WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.EVENT_ID=NEM.EVENT_ID AND
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND
+                   -- NEM.EVENT_ID IN (1,2,7,8) AND
+                    CCPL.RECORD_STATUS = ''A'' AND
+                    CPD.RECORD_STATUS = ''A'' AND
+                    CCBI.RECORD_STATUS = ''A'' AND
+                    NEM.RECORD_STATUS = ''A'' AND
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    CCI.RECORD_STATUS=''A'' AND
+					ci.record_status = ''A'' AND -- Change by Santi @20120406 Check record Status
+                 --   CI.BATCH_RUN_ID=nvl(:A,-1) AND
+                    ' || v_str || '
+                    cpd.payee_type_vid = 557
+                    and ccbi.claim_status_vid not in (816, 817)   --redmine 19125
+                 GROUP BY
+                    CCI.CLAIM_NUMBER,
+                    NEM.EVENT_TYPE,
+                    CCBI.CLAIMS_BASIC_INFO_ID,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+    UNION all
+    --cpf
+    SELECT
+                    CCI.CLAIM_NUMBER,
+                    sum(CI.INST_AMT) INST_AMT,
+                    upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                    (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                         else ''OTHER'' end from aegi_claims.CLM_CLAIMED_BENEFIT_INFO CCBTI
+                         WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE,
+                     cci.org_policy_id,
+                     cci.org_account_id,
+                     CCI.RECORD_STATUS,
+                     cpd.org_payee_id
+                    FROM
+                    aegi_claims.CLM_CLAIMS_INFO CCI,
+                    aegi_claims.CLM_CLAIMS_BASIC_INFO CCBI,
+                    aegi_claims.CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    aegi_claims.CLM_PAYMENT_DETAIL CPD,
+                    aegi_claims.CLM_INSTALLMENT CI,
+                    aegi_claims.NBS_EVENT_MST NEM
+                    WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.EVENT_ID=NEM.EVENT_ID AND
+					ci.record_status = ''A'' AND -- Change by Santi @20120406 Check record Status
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND
+                   -- NEM.EVENT_ID IN (1,2,7,8) AND
+                    CCPL.RECORD_STATUS = ''A'' AND
+                    CPD.RECORD_STATUS = ''A'' AND
+                    CCBI.RECORD_STATUS = ''A'' AND
+                    NEM.RECORD_STATUS = ''A'' AND
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    CCI.RECORD_STATUS=''A'' AND
+                    --CI.BATCH_RUN_ID=nvl(:A,-1) AND
+                    ' || v_str || '
+                    cpd.payee_type_vid = 558
+                    and ccbi.claim_status_vid not in (816, 817)   --redmine 19125
+                    GROUP BY
+                    CCI.CLAIM_NUMBER,
+                    NEM.EVENT_TYPE,
+                    CCBI.CLAIMS_BASIC_INFO_ID,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+    union all
+    --provider
+    SELECT
+                    CCI.CLAIM_NUMBER,
+                    sum(CI.INST_AMT) INST_AMT,
+                    upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                    (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                         else ''OTHER'' end from aegi_claims.CLM_CLAIMED_BENEFIT_INFO CCBTI
+                         WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    --CPM.INSTITUTION_ID org_PAYEE_ID
+                    decode(cpd.payee_type_vid,559,decode(aegi_claims.GET_PROVIDER_ADMIN_ID(ccpl.CLAIMS_BASIC_INFO_ID,cpd.org_payee_id),
+                        -1,(select institution_id from aegi_claims.clm_provider_mst where provider_id = cpd.payee_id),
+                            (select mst.institution_id from aegi_claims.clm_pro_admin_group_dtl dtl, aegi_claims.clm_pro_admin_group_mst mst,
+                                aegi_claims.clm_provider_mst pro where dtl.provider_id = cpd.payee_id and pro.provider_id = dtl.provider_id
+                                and dtl.provider_admin_group_id = mst.provider_admin_group_id
+								And dtl.record_status = ''A'' --- BS PM2869
+								)),cpd.org_payee_id) org_PAYEE_ID
+                  FROM
+                    aegi_claims.CLM_CLAIMS_INFO CCI,
+                    aegi_claims.CLM_CLAIMS_BASIC_INFO CCBI,
+                    aegi_claims.CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    aegi_claims.CLM_PAYMENT_DETAIL CPD,
+                    aegi_claims.CLM_INSTALLMENT CI,
+                    aegi_claims.NBS_EVENT_MST NEM
+                   -- aegi_claims.clm_provider_mst cpm
+                  WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.EVENT_ID=NEM.EVENT_ID AND
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND
+                    --cpm.provider_id=CPD.org_PAYEE_ID and
+                  --  NEM.EVENT_ID IN (1,2,7,8) AND
+                    CCPL.RECORD_STATUS = ''A'' AND
+                    CPD.RECORD_STATUS = ''A'' AND
+                    CCBI.RECORD_STATUS = ''A'' AND
+                    NEM.RECORD_STATUS = ''A'' AND
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    CCI.RECORD_STATUS=''A'' AND
+					ci.record_status = ''A'' AND -- Change by Santi @20120406 Check record Status
+                    --CI.BATCH_RUN_ID = nvl(:a,-1) AND
+                    ' || v_str || '
+                    cpd.payee_type_vid = 559
+                    and ccbi.claim_status_vid not in (816, 817)   --redmine 19125
+                  GROUP BY
+                    CCI.CLAIM_NUMBER,
+                    NEM.EVENT_TYPE,
+                    CCBI.CLAIMS_BASIC_INFO_ID,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                   -- CPM.INSTITUTION_ID
+                    cpd.payee_type_vid,
+                    ccpl.CLAIMS_BASIC_INFO_ID,
+                    cpd.org_payee_id,
+                    cpd.payee_id
+    UNION all
+    --others
+    SELECT
+                    CCI.CLAIM_NUMBER,
+                    sum(CI.INST_AMT) INST_AMT,
+                    upper(NEM.EVENT_TYPE) EVENT_TYPE,
+                    (select case when upper(NEM.EVENT_TYPE)=''INPATIENT'' then ''OTHER''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=110 then ''PANEL''
+                         when upper(NEM.EVENT_TYPE)=''OUTPATIENT'' and CCBTI.PRO_CONTRACT_TYPE_VID=111 then ''NON PANEL''
+                         else ''OTHER'' end from aegi_claims.CLM_CLAIMED_BENEFIT_INFO CCBTI
+                         WHERE CCBI.CLAIMS_BASIC_INFO_ID=CCBTI.CLAIMS_BASIC_INFO_ID and rownum < 2) PANEL_TYPE,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+                  FROM
+                    aegi_claims.CLM_CLAIMS_INFO CCI,
+                    aegi_claims.CLM_CLAIMS_BASIC_INFO CCBI,
+                    aegi_claims.CLM_CLAIMS_PAYMENT_LINK CCPL,
+                    aegi_claims.CLM_PAYMENT_DETAIL CPD,
+                    aegi_claims.CLM_INSTALLMENT CI,
+                    aegi_claims.NBS_EVENT_MST NEM
+                  WHERE
+                    CCI.CLAIMS_INFO_ID=CCBI.CLAIMS_INFO_ID AND
+                    CCBI.CLAIMS_BASIC_INFO_ID=CCPL.CLAIMS_BASIC_INFO_ID AND
+                    CCPL.CLM_PAYMENT_DTL_ID=CPD.CLM_PAYMENT_DTL_ID AND
+                    CPD.CLM_PAYMENT_DTL_ID=CI.CLM_PAYMENT_DTL_ID AND
+                    CCI.EVENT_ID=NEM.EVENT_ID AND
+                    CPD.CLAIM_PAYMENT_MODE_VID IN (551,569) AND
+                   -- NEM.EVENT_ID IN (1,2,7,8) AND
+                    CCPL.RECORD_STATUS = ''A'' AND
+                    CPD.RECORD_STATUS = ''A'' AND
+                    CCBI.RECORD_STATUS = ''A'' AND
+                    NEM.RECORD_STATUS = ''A'' AND
+                    CCBI.CLAIM_STATUS_VID <> 817 AND
+                    CCI.RECORD_STATUS=''A'' AND
+					ci.record_status = ''A'' AND -- Change by Santi @20120406 Check record Status
+                    --CI.BATCH_RUN_ID=nvl(:A,-1) AND
+                    ' || v_str || '
+                    cpd.payee_type_vid = 560
+                    and ccbi.claim_status_vid not in (816, 817)   --redmine 19125
+                  GROUP BY
+                    CCI.CLAIM_NUMBER,
+                    NEM.EVENT_TYPE,
+                    CCBI.CLAIMS_BASIC_INFO_ID,
+                    cci.org_policy_id,
+                    cci.org_account_id,
+                    CCI.RECORD_STATUS,
+                    cpd.org_payee_id
+                    ) ab
+                    )
+					--**START PM2308
+                    --CCI1 ON fin.REF_NBR = CCI1.CLAIM_NUMBER
+					CCI1 ON fin.REF_number = CCI1.CLAIM_NUMBER
+					--**END PM2308
+                        AND CCI1.org_payee_id  = fin.payee_id
+                        AND Fin.PMT_METHOD_VID in (551,569)
+group by
+       FIN.PAYEE_NAME,
+       FIN.BANK_NAME,
+       FIN.BANK_ACCOUNT_NO,
+       FIN.BRANCH_NAME,
+       FIN.REF_PV_NUMBER,
+       --**START PM2308
+	   --FIN.REF_NBR,
+	   FIN.REF_number,
+	   --**END PM2308
+       CCI1.EVENT_TYPE,
+       CCI1.PANEL_TYPE
+         ';
+
+/*
+        OPEN po_ref_clm_dtl_accholder_list FOR v_sql_stmt USING pi_batch_run_id,
+                                                                pi_batch_run_id,
+                                                                pi_batch_run_id,
+                                                                pi_batch_run_id,
+                                                                pi_batch_run_id,
+                                                                pi_batch_run_id;
+*/
+
+        OPEN po_ref_clm_dtl_accholder_list FOR v_sql_stmt;
+
+EXCEPTION
+        WHEN OTHERS THEN
+            COM_PKG.LOG_MSG_PROC(
+                pi_flag_type            =>    'E',
+                pi_package_name            =>    'CLM_CHEQUE_CYCLE_PKG',
+                pi_procedure_name        =>    'CLM_DTL_ACC_HOLDER_LIST',
+                pi_debug_msg            =>    SQLERRM,
+                pi_entity_id            =>    null,
+                pi_created_by            =>    'SYSTEM'
+            );
+
+--start chr5780 big bank
+  rollback;
+--end chr5780 big bank
+END CLM_DTL_ACC_HOLDER_LIST;
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+END CLM_CHEQUE_CYCLE_PKG;
